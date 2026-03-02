@@ -92,6 +92,18 @@ class ProductUpdater(SlotUpdater):
                     print >>sys.stderr, "found requested variant %s" % requested_variant
                     return variant
 
+        def score(variant):
+            score = 0
+            images = variant.get("images")
+            if isinstance(images, list) and len(images) > 0:
+                score += 2
+            if not variant.get("coming_soon", False):
+                score += 2
+            if variant.get("current_price") is not None:
+                score += 1
+            return score
+
+        variants = sorted(variants, key=score, reverse=True)
         return variants[0]
 
     def _extract_image_ref(self, variant):
@@ -246,6 +258,21 @@ class ProductUpdater(SlotUpdater):
 
         raise ValueError("random product fetch failed: %s" % (" | ".join(errors),))
 
+    def _fetch_product_by_id(self, product_id):
+        product_id = (product_id or "").strip()
+        if not product_id:
+            raise ValueError("empty product_id")
+
+        r = http.get(
+            url = "https://%s/csp/products/public/product/%s" % (self._endpoint, product_id),
+            params = {
+                'country': self._country
+            },
+            timeout = 5,
+        )
+        r.raise_for_status()
+        return self._unwrap_product_payload(r.json())
+
     def fetch_variant_image_data(self, variant, res='high'):
         image_ref = self._extract_image_ref(variant)
         if image_ref.startswith("http://") or image_ref.startswith("https://"):
@@ -284,22 +311,23 @@ class ProductUpdater(SlotUpdater):
         if mode == 'random_product':
             brands = slot_settings.get('brands', [])
             try:
-                product = self._fetch_random_product(brands)
+                random_product = self._fetch_random_product(brands)
+                random_product_id = random_product.get('id') or ""
+                if random_product_id:
+                    try:
+                        product = self._fetch_product_by_id(random_product_id)
+                    except Exception as err:
+                        print >>sys.stderr, "failed to enrich random product %s: %r" % (random_product_id, err)
+                        product = random_product
+                else:
+                    product = random_product
                 variant = self._select_variant(product, "")
             except Exception as err:
                 print >>sys.stderr, "random mode failed: %r" % (err,)
                 fallback_product_id = slot_settings.get('product_id', '').strip()
                 if fallback_product_id:
                     try:
-                        r = http.get(
-                            url = "https://%s/csp/products/public/product/%s" % (self._endpoint, fallback_product_id),
-                            params = {
-                                'country': self._country
-                            },
-                            timeout = 5,
-                        )
-                        r.raise_for_status()
-                        product = self._unwrap_product_payload(r.json())
+                        product = self._fetch_product_by_id(fallback_product_id)
                         variant = self._select_variant(product, slot_settings.get('variant_id', '').strip())
                     except Exception as err2:
                         print >>sys.stderr, "random fallback(single product) failed: %r" % (err2,)
@@ -316,16 +344,7 @@ class ProductUpdater(SlotUpdater):
                 variant = {}
             else:
                 try:
-                    r = http.get(
-                        url = "https://%s/csp/products/public/product/%s" % (self._endpoint, product_id),
-                        params = {
-                            'country': self._country
-                        },
-                        timeout = 5,
-                    )
-                    r.raise_for_status()
-                    product = self._unwrap_product_payload(r.json())
-
+                    product = self._fetch_product_by_id(product_id)
                     variant_id = slot_settings.get('variant_id', '').strip()
                     variant = self._select_variant(product, variant_id)
                 except Exception as err:
@@ -341,6 +360,9 @@ class ProductUpdater(SlotUpdater):
         customer_group = product.get('customer_group') or "FEMALE"
         currency = variant.get('currency') or "EUR"
         variant_id = variant.get('id') or ""
+        print >>sys.stderr, "resolved product slot mode=%s product_id=%s variant_id=%s" % (
+            mode, product_id, variant_id
+        )
 
         # Fetch Produkt Image
         try:
