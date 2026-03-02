@@ -50,6 +50,36 @@ class ProductUpdater(SlotUpdater):
                         variants = raw
         return [variant for variant in variants if isinstance(variant, dict)]
 
+    def _extract_products_from_payload(self, payload):
+        if isinstance(payload, list):
+            return [p for p in payload if isinstance(p, dict)]
+
+        if not isinstance(payload, dict):
+            return []
+
+        products = []
+        for key in ("result", "products", "items"):
+            value = payload.get(key)
+            if isinstance(value, list):
+                products.extend([p for p in value if isinstance(p, dict)])
+
+        data = payload.get("data")
+        if isinstance(data, list):
+            products.extend([p for p in data if isinstance(p, dict)])
+        elif isinstance(data, dict):
+            for key in ("result", "products", "items"):
+                value = data.get(key)
+                if isinstance(value, list):
+                    products.extend([p for p in value if isinstance(p, dict)])
+            if isinstance(data.get("product"), dict):
+                products.append(data["product"])
+
+        # If this payload itself already looks like a product, accept it.
+        if payload.get("variants") or payload.get("brand") or payload.get("id"):
+            products.append(payload)
+
+        return products
+
     def _select_variant(self, product, requested_variant):
         variants = self._variants_from_product(product)
         if not variants:
@@ -111,6 +141,56 @@ class ProductUpdater(SlotUpdater):
             return 1.0
         return value
 
+    def _normalize_mode(self, mode):
+        mode = (mode or "").strip().lower()
+        if mode in ("single_product", "single", "one", "product"):
+            return "single_product"
+        if mode in ("random", "random_product", "rand"):
+            return "random_product"
+        return "random_product"
+
+    def _fetch_random_product(self, brands):
+        if isinstance(brands, basestring):
+            brands = [brands] if brands.strip() else []
+        if not isinstance(brands, list):
+            brands = []
+
+        params = {
+            'country': self._country,
+            'limit': 1,
+        }
+        if brands:
+            print >>sys.stderr, 'brand filter active: %r' % (brands,)
+            params['brand'] = ','.join(brands)
+
+        endpoints = [
+            "https://%s/csp/products/public/products/randomCollectionProducts" % (self._endpoint,),
+            "https://%s/csp/products/public/product/randomCollectionProducts" % (self._endpoint,),
+            "https://%s/csp/products/public/products/randomProducts" % (self._endpoint,),
+            "https://%s/csp/products/public/product/randomProducts" % (self._endpoint,),
+            "https://%s/csp/products/public/products/random" % (self._endpoint,),
+            "https://%s/csp/products/public/product/random" % (self._endpoint,),
+        ]
+
+        errors = []
+        for url in endpoints:
+            try:
+                r = http.get(
+                    url = url,
+                    params = params,
+                    timeout = 5
+                )
+                r.raise_for_status()
+                products = self._extract_products_from_payload(r.json())
+                if not products:
+                    errors.append("empty product list from %s" % (url,))
+                    continue
+                return products[0]
+            except Exception as err:
+                errors.append("%s: %r" % (url, err))
+
+        raise ValueError("random product fetch failed: %s" % (" | ".join(errors),))
+
     def fetch_variant_image_data(self, variant, res='high'):
         image_ref = self._extract_image_ref(variant)
         if image_ref.startswith("http://") or image_ref.startswith("https://"):
@@ -139,41 +219,58 @@ class ProductUpdater(SlotUpdater):
     def generate_slot(self, c, slot_settings):
         print >>sys.stderr, "SLOT", slot_settings
 
-        mode = slot_settings.get('mode', 'random_product')
+        mode = self._normalize_mode(slot_settings.get('mode', 'random_product'))
         if mode == 'random_product':
-            # gender = slot_settings.get('gender', 'female')
             brands = slot_settings.get('brands', [])
-
-            params = {
-                'country': self._country,
-                'limit': 1
-            }
-            if brands:
-                print >>sys.stderr, 'brand filter active: %r' % (brands,)
-                params['brand'] = ','.join(brands)
-
-            r = http.get(
-                url = "https://%s/csp/products/public/products/randomCollectionProducts" % (self._endpoint,),
-                params = params,
-                timeout = 5
-            )
-            r.raise_for_status()
-            product = self._unwrap_product_payload(r.json())
-            variant = self._select_variant(product, "")
+            try:
+                product = self._fetch_random_product(brands)
+                variant = self._select_variant(product, "")
+            except Exception as err:
+                print >>sys.stderr, "random mode failed: %r" % (err,)
+                fallback_product_id = slot_settings.get('product_id', '').strip()
+                if fallback_product_id:
+                    try:
+                        r = http.get(
+                            url = "https://%s/csp/products/public/product/%s" % (self._endpoint, fallback_product_id),
+                            params = {
+                                'country': self._country
+                            },
+                            timeout = 5,
+                        )
+                        r.raise_for_status()
+                        product = self._unwrap_product_payload(r.json())
+                        variant = self._select_variant(product, slot_settings.get('variant_id', '').strip())
+                    except Exception as err2:
+                        print >>sys.stderr, "random fallback(single product) failed: %r" % (err2,)
+                        product = {'id': 'unknown', 'brand': '', 'variants': [{}]}
+                        variant = {}
+                else:
+                    product = {'id': 'unknown', 'brand': '', 'variants': [{}]}
+                    variant = {}
         else:
             product_id = slot_settings.get('product_id', '').strip()
-            r = http.get(
-                url = "https://%s/csp/products/public/product/%s" % (self._endpoint, product_id),
-                params = {
-                    'country': self._country
-                },
-                timeout = 5,
-            )
-            r.raise_for_status()
-            product = self._unwrap_product_payload(r.json())
+            if not product_id:
+                print >>sys.stderr, "single_product mode without product_id"
+                product = {'id': 'unknown', 'brand': '', 'variants': [{}]}
+                variant = {}
+            else:
+                try:
+                    r = http.get(
+                        url = "https://%s/csp/products/public/product/%s" % (self._endpoint, product_id),
+                        params = {
+                            'country': self._country
+                        },
+                        timeout = 5,
+                    )
+                    r.raise_for_status()
+                    product = self._unwrap_product_payload(r.json())
 
-            variant_id = slot_settings.get('variant_id', '').strip()
-            variant = self._select_variant(product, variant_id)
+                    variant_id = slot_settings.get('variant_id', '').strip()
+                    variant = self._select_variant(product, variant_id)
+                except Exception as err:
+                    print >>sys.stderr, "single_product fetch failed: %r" % (err,)
+                    product = {'id': product_id or 'unknown', 'brand': '', 'variants': [{}]}
+                    variant = {}
         # print >>sys.stderr, "product", pprint.pformat(product)
         # print >>sys.stderr, "variant", pprint.pformat(variant)
 
