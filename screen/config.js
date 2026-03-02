@@ -5,6 +5,7 @@ const store = new Vuex.Store({
   state: {
     devices: {},
     config: {
+      debug_overlay: false,
       orientation: "landscape",
       screens: [],
     },
@@ -28,6 +29,9 @@ const store = new Vuex.Store({
     },
     set_orientation(state, {orientation}) {
       state.config.orientation = orientation;
+    },
+    set_debug_overlay(state, {debug_overlay}) {
+      state.config.debug_overlay = debug_overlay === true;
     },
     set_arrangement(state, {group_id, arrangement}) {
       state.config.screens[group_id].arrangement = arrangement;
@@ -80,6 +84,16 @@ const store = new Vuex.Store({
 Vue.component('config-ui', {
   template: '#config-ui',
   computed: {
+    debug_overlay: {
+      get() {
+        return this.$store.state.config.debug_overlay === true;
+      },
+      set(v) {
+        this.$store.commit('set_debug_overlay', {
+          debug_overlay: v === true,
+        })
+      },
+    },
     orientation: {
       get() {
         return this.$store.state.config.orientation;

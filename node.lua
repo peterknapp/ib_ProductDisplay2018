@@ -924,14 +924,23 @@ local function Playlist()
 end
 local playlist = Playlist()
 local debug_overlay_enabled = false
+local debug_overlay_root = false
+local debug_overlay_screen = false
+
+local function update_debug_overlay_state()
+    debug_overlay_enabled = debug_overlay_root or debug_overlay_screen
+end
 
 
 util.json_watch("config.json", function(config)
     playlist.update(config.playlist)
-    debug_overlay_enabled = config.debug_overlay == true
+    debug_overlay_root = config.debug_overlay == true
+    update_debug_overlay_state()
 end)
 
 util.json_watch("screen/config.json", function(config)
+    debug_overlay_screen = config.debug_overlay == true
+    update_debug_overlay_state()
     content_area.update(config.orientation == "landscape")
 
     local function setup_videowall(width, height, n_th_screen, landscape)
