@@ -179,11 +179,16 @@ local function VirtualScreen()
                y1 < NATIVE_HEIGHT and y2 > 0
     end
 
+    local function info()
+        return screen
+    end
+
     return {
         update = update;
         covers = covers;
         setup = setup;
         video = video;
+        info = info;
     }
 end
 local screen = VirtualScreen()
@@ -1129,10 +1134,23 @@ function node.render()
 
         local line1 = debug_global_line_1 ~= "" and debug_global_line_1 or "dbg waiting for product payload..."
         local line2 = debug_global_line_2 ~= "" and debug_global_line_2 or ("dbg now=" .. os.date("%Y-%m-%d %H:%M:%S"))
-        local y = NATIVE_HEIGHT - 56
-        test_assets.red:draw(0, NATIVE_HEIGHT - 64, NATIVE_WIDTH, NATIVE_HEIGHT, 0.65)
+        local s = screen.info() or {}
+        local ca_w, ca_h = content_area.size()
+        local line3 = string.format(
+            "view x=%s y=%s w=%s h=%s rot=%s orient=%s area=%dx%d",
+            tostring(s.x or "?"),
+            tostring(s.y or "?"),
+            tostring(s.w or "?"),
+            tostring(s.h or "?"),
+            tostring(s.rotation or "?"),
+            content_area.is_landscape() and "landscape" or "portrait",
+            ca_w, ca_h
+        )
+        local y = NATIVE_HEIGHT - 84
+        test_assets.red:draw(0, NATIVE_HEIGHT - 94, NATIVE_WIDTH, NATIVE_HEIGHT, 0.65)
         test_assets.font:write(8, y, line1, 22, 1,1,1,1)
         test_assets.font:write(8, y+24, line2, 22, 1,1,1,1)
+        test_assets.font:write(8, y+48, line3, 22, 1,1,1,1)
     end
 
     if testing() then
