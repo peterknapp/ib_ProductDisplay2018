@@ -16,12 +16,6 @@
         ],
         "default": "landscape"
     }, {
-        "title": "Debug overlay",
-        "name": "debug_overlay",
-        "ui_width": 3,
-        "type": "boolean",
-        "default": false
-    }, {
         "title": "Screen Groups",
         "name": "screens",
         "type": "list",

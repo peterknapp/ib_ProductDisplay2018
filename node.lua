@@ -491,6 +491,8 @@ local function Product(play_state, item)
                     updated_str,
                     #matching_products
                 )
+                debug_global_line_1 = debug_line_1
+                debug_global_line_2 = debug_line_2
             end
         elseif product then
             local function render_debug_overlay()
@@ -925,7 +927,8 @@ end
 local playlist = Playlist()
 local debug_overlay_enabled = false
 local debug_overlay_root = false
-local debug_overlay_screen = false
+local debug_global_line_1 = ""
+local debug_global_line_2 = ""
 
 local function is_enabled(value)
     if value == true then
@@ -942,7 +945,7 @@ local function is_enabled(value)
 end
 
 local function update_debug_overlay_state()
-    debug_overlay_enabled = debug_overlay_root or debug_overlay_screen
+    debug_overlay_enabled = debug_overlay_root
 end
 
 
@@ -953,8 +956,6 @@ util.json_watch("config.json", function(config)
 end)
 
 util.json_watch("screen/config.json", function(config)
-    debug_overlay_screen = is_enabled(config.debug_overlay)
-    update_debug_overlay_state()
     content_area.update(config.orientation == "landscape")
 
     local function setup_videowall(width, height, n_th_screen, landscape)
@@ -1058,6 +1059,13 @@ function node.render()
         gl.ortho()
         test_assets.red:draw(0, 0, 120, 34, 0.75)
         test_assets.font:write(8, 8, "DBG ON", 18, 1,1,1,1)
+
+        local line1 = debug_global_line_1 ~= "" and debug_global_line_1 or "dbg waiting for product payload..."
+        local line2 = debug_global_line_2 ~= "" and debug_global_line_2 or ("dbg now=" .. os.date("%Y-%m-%d %H:%M:%S"))
+        local y = NATIVE_HEIGHT - 56
+        test_assets.red:draw(0, NATIVE_HEIGHT - 64, NATIVE_WIDTH, NATIVE_HEIGHT, 0.45)
+        test_assets.font:write(8, y, line1, 22, 1,1,1,1)
+        test_assets.font:write(8, y+24, line2, 22, 1,1,1,1)
     end
 
     if testing() then
