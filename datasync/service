@@ -1,0 +1,361 @@
+#!/usr/bin/python2.7
+import sys, os, time, traceback, json, zipfile, shutil, gc
+import requests, gevent
+from cStringIO import StringIO
+from gevent import monkey, socket, wsgi
+from gevent.queue import Queue
+from gevent.server import DatagramServer
+from flask import Flask, abort, request
+
+monkey.patch_all()
+
+PORT = 4242
+COMMIT_FUTURE_S = 10
+
+class NodeDiscovery(object):
+    def __init__(self, my_id):
+        self._my_id = my_id
+        self._nodes = {}
+        self._group = ''
+        self._num_nodes = 0
+
+        self.join('private-%s' % self._my_id, 1)
+
+        self._server_socket = socket.socket(
+            family = socket.AF_INET, 
+            type = socket.SOCK_DGRAM, 
+            proto = socket.IPPROTO_UDP
+        ) 
+        self._server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        self._server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self._server_socket.bind(('', PORT))
+
+    @property
+    def id(self):
+        return self._my_id
+
+    @property
+    def num_expected_nodes(self):
+        return self._num_nodes
+
+    def join(self, group, num_nodes):
+        if group == self._group:
+            return
+        print >>sys.stderr, "switching to group %r" % (group,)
+        self._group = group
+        self._nodes = {}
+        self._num_nodes = num_nodes
+
+    def announce_key_fetch(self, key, version):
+        for node_id, (last_seen, addr) in self._nodes.iteritems():
+            self._server_socket.sendto(
+                'K:%s:%s' % (key, version),
+                (addr, PORT)
+            )
+
+    def announce_key_commit(self, key, version, commit_time):
+        for node_id, (last_seen, addr) in self._nodes.iteritems():
+            self._server_socket.sendto(
+                'C:%s:%s:%f' % (key, version, commit_time),
+                (addr, PORT)
+            )
+
+    @property
+    def is_master(self):
+        if not self._nodes:
+            return False
+        return self._my_id == min(self._nodes.iterkeys())
+
+    def handle_peer_announce(self, address, node_id, node_group):
+        if node_group != self._group:
+            return
+        self._nodes[node_id] = time.time(), address
+        # print >>sys.stderr, self._nodes
+
+    def handle_packet(self, data, address):
+        if data.startswith('A:'):
+            _, their_id, their_group = data.split(':')
+            self.handle_peer_announce(address[0], their_id, their_group)
+        elif data.startswith('K:'):
+            _, key, version = data.split(':')
+            ClientKeySpace.fetch(address[0], key, version)
+        elif data.startswith('C:'):
+            _, key, version, commit_time = data.split(':')
+            ClientKeySpace.commit(key, version, float(commit_time))
+        else:
+            print >>sys.stderr, '%s: got %r' % (address, data)
+
+    def server_task(self):
+        DatagramServer(self._server_socket, self.handle_packet).serve_forever()
+
+    def cleanup_task(self):
+        while 1:
+            expired, now = set(), time.time()
+            for node_id, (last_seen, addr) in self._nodes.iteritems():
+                if now - last_seen > 5: # seconds
+                    expired.add(node_id)
+            for node_id in expired:
+                print >>sys.stderr, '%s expired' % node_id
+                del self._nodes[node_id]
+            gevent.sleep(1)
+
+    def bcast_task(self):
+        while 1:
+            self._server_socket.sendto(
+                'A:%s:%s' % (self._my_id, self._group),
+                ('255.255.255.255', PORT)
+            )
+            gevent.sleep(1)
+
+    def start(self):
+        gevent.spawn(self.server_task)
+        gevent.spawn(self.cleanup_task)
+        gevent.spawn(self.bcast_task)
+NodeDiscovery = NodeDiscovery(os.environ['SERIAL'])
+
+class MasterKey(object):
+    def __init__(self, key, version, value):
+        self._key = key
+        self._version = version
+        self._value = value
+        self._precommitted = set()
+
+    @property
+    def value(self):
+        return self._value
+
+    @property
+    def version(self):
+        return self._version
+
+    def precommit(self, node_id):
+        self._precommitted.add(node_id)
+        # We just check the number of precommitted nodes, not their
+        # ids. We don't know those as join() just specifies the
+        # expected number of nodes, not their ids. This check therefore
+        # relies on unique group names to make sure the correct nodes
+        # actually commit the data.
+        if len(self._precommitted) == NodeDiscovery.num_expected_nodes:
+            NodeDiscovery.announce_key_commit(
+                self._key,
+                self._version,
+                time.time() + COMMIT_FUTURE_S,
+            )
+
+class MasterKeySpace(object):
+    def __init__(self):
+        self._keys = {}
+
+    def set(self, key, value):
+        version = "%020.7f" % time.time()
+        self._keys[key] = MasterKey(key, version, value)
+        NodeDiscovery.announce_key_fetch(key, version)
+
+    def get(self, key, version):
+        k = self._keys.get(key)
+        if k.version != version:
+            return None
+        return k
+MasterKeySpace = MasterKeySpace()
+
+class ClientKeyVersion(object):
+    def __init__(self, key, version, value):
+        self._key = key
+        self._version = version
+        self._value = value
+        self._files = {}
+        self._fname_prefix = 'data-sync-%s-%s-' % (self._key, self._version)
+        self._commit_time = None
+
+    def write_file(self, filename, content):
+        full_filename = self._fname_prefix + filename
+        with file(full_filename, 'wb') as f:
+            shutil.copyfileobj(content, f)
+        self._files[filename] = full_filename
+
+    def precommit(self):
+        z = zipfile.ZipFile(self._value, 'r')
+        for zi in z.infolist():
+            with z.open(zi, 'r') as source:
+                self.write_file(zi.filename, source)
+        z.close()
+        self._value = None
+        gc.collect()
+
+    def cleanup(self):
+        for full_filename in self._files.itervalues():
+            try:
+                os.unlink(full_filename)
+            except:
+                traceback.print_exc()
+
+    def commit(self, commit_time):
+        self._commit_time = commit_time
+
+    @property
+    def version(self):
+        return self._version
+
+    @property
+    def files(self):
+        return self._files
+
+    @property
+    def commit_time(self):
+        return self._commit_time
+
+    @property
+    def is_committed(self):
+        return self._commit_time is not None
+
+    def is_active(self, safety_margin=5):
+        if self._commit_time is None:
+            return False
+        return self._commit_time + safety_margin < time.time()
+
+class ClientKey(object):
+    def __init__(self, key):
+        self._key = key
+        self._versions = []
+
+    def cleanup_old_versions(self):
+        num_committed, has_active = 0, False
+        delete_idx = []
+        for idx, version in reversed(list(enumerate(self._versions))):
+            if version.is_committed:
+                num_committed += 1
+            if version.is_active(safety_margin=5):
+                has_active = True
+            if has_active:
+                if not version.is_committed or num_committed > 2:
+                    delete_idx.append(idx)
+        for idx in delete_idx:
+            self._versions[idx].cleanup()
+            del self._versions[idx]
+
+    def precommit(self, version, value):
+        if not self._versions:
+            latest_version = "%020.7f" % 0
+        else:
+            latest_version = self._versions[-1].version
+        if version <= latest_version:
+            return
+        key_version = ClientKeyVersion(self._key, version, value)
+        key_version.precommit()
+        self._versions.append(key_version)
+
+    def commit(self, version, commit_time):
+        print >>sys.stderr, "committing version", version
+        if not self._versions:
+            return
+        latest_version = self._versions[-1]
+        print >>sys.stderr, "latest version is", latest_version.version
+        if version != latest_version.version:
+            print >>sys.stderr, "nope. version mismatch"
+            return
+        if latest_version.is_committed:
+            print >>sys.stderr, "nope. already committed"
+            return
+        self.cleanup_old_versions()
+        latest_version.commit(commit_time)
+        with file('%s.json.tmp' % self._key, 'wb') as f:
+            f.write(json.dumps([
+                dict(
+                    files = version.files,
+                    commit_time = version.commit_time,
+                )
+                for version in self._versions
+                if version.is_committed
+            ]))
+        os.rename('%s.json.tmp' % self._key, '%s.json' % self._key)
+
+class ClientKeySpace(object):
+    def __init__(self):
+        self._keys = {}
+        self._fetch_queue = Queue()
+
+    def fetch(self, address, key, version):
+        self._fetch_queue.put((address, key, version))
+
+    def precommit(self, key, version, value):
+        if not key in self._keys:
+            self._keys[key] = ClientKey(key)
+        client_key = self._keys[key]
+        client_key.precommit(version, value)
+
+    def commit(self, key, version, commit_time):
+        if key not in self._keys:
+            return
+        client_key = self._keys[key]
+        client_key.commit(version, commit_time)
+
+    def fetch_task(self):
+        while 1:
+            address, key, version = self._fetch_queue.get()
+            try:
+                r = requests.get('http://%s:%d/fetch/%s/%s' % (
+                    address, PORT, key, version
+                ), timeout=2)
+                r.raise_for_status()
+                self.precommit(key, version, StringIO(r.content))
+                r = requests.get('http://%s:%d/fetch/%s/%s/precommit/%s' % (
+                    address, PORT, key, version, NodeDiscovery.id,
+                ), timeout=2)
+                r.raise_for_status()
+            except Exception:
+                traceback.print_exc()
+
+    def start(self):
+        gevent.spawn(self.fetch_task)
+ClientKeySpace = ClientKeySpace()
+
+app = Flask(__name__)
+app.debug = True
+
+@app.route('/')
+def index():
+    return 'Hello World'
+
+@app.route('/is_master')
+def is_master():
+    return ('no', 'yes')[NodeDiscovery.is_master]
+
+@app.route('/join/<group>/<int:num_nodes>', methods=['POST'])
+def join(group, num_nodes):
+    NodeDiscovery.join(group, num_nodes)
+    return 'ok'
+
+@app.route('/update/<key>', methods=['POST'])
+def update(key):
+    if not NodeDiscovery.is_master:
+        abort(503)
+    value = request.get_data()
+    MasterKeySpace.set(key, value)
+    return 'ok'
+
+@app.route('/fetch/<key>/<version>')
+def fetch(key, version):
+    if not NodeDiscovery.is_master:
+        abort(503)
+    v = MasterKeySpace.get(key, version)
+    if v is None:
+        abort(404)
+    return v.value
+
+@app.route('/fetch/<key>/<version>/precommit/<node_id>')
+def precommit(key, version, node_id):
+    if not NodeDiscovery.is_master:
+        abort(503)
+    v = MasterKeySpace.get(key, version)
+    if v is None:
+        abort(404)
+    v.precommit(node_id)
+    return ''
+
+def server():
+    NodeDiscovery.start()
+    ClientKeySpace.start()
+    wsgi.WSGIServer(('', PORT), app).serve_forever()
+
+if __name__ == "__main__":
+    server()

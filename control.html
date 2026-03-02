@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+  </head>
+  <body>
+    <button id='test-mode' class='btn btn-default'>Test Mode for 30 seconds</button>
+    <script src="hosted.js"></script>
+    <script>
+      ib.setDefaultStyle();
+
+      document.getElementById('test-mode').addEventListener('click', function(evt) {
+        ib.sendCommand("test", "");
+      });
+    </script>
+  </body>
+</html>

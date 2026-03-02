@@ -1,0 +1,84 @@
+#!/usr/bin/python2.7
+import threading, time, json, sys, traceback, os, hashlib
+from datasync import DistributedDataClient
+from ny_util import http
+from hosted import CONFIG
+
+CONFIG.restart_on_update()
+
+SERIAL = os.environ['SERIAL']
+
+def join_screen_group():
+    def join_group(arrangement, devices):
+        if arrangement in ('default', 'flipped'):
+            group_name = 'group-%s' % SERIAL
+            group_size = 1
+        else:
+            assigned_serials = [device['serial'] for device in devices if device['serial'] != '']
+
+            # build a unique group name from all assigned devices
+            group_name = hashlib.md5('|'.join(sorted(assigned_serials))).hexdigest()
+            group_size = len(assigned_serials)
+        print >>sys.stderr, "joining group '%s', size %d" % (group_name, group_size)
+        DistributedDataClient.join(group_name, group_size)
+
+    while 1:
+        with file('screen/config.json', 'rb') as f:
+            config = json.load(f)
+        for idx, screen in enumerate(config['screens']):
+            if any(device['serial'] == SERIAL for device in screen['devices']):
+                join_group(screen['arrangement'], screen['devices'])
+                break
+        else:
+            join_group('default', [])
+        time.sleep(5)
+
+def fetch_i18n():
+    while 1:
+        try:
+            r = http.get("https://%s/public/assets/i18n/%s.json" % (CONFIG['endpoint'], CONFIG['language']))
+            r.raise_for_status()
+            i18n = r.json()
+            with file('i18n.json', 'wb') as f:
+                json.dump(i18n, f)
+        except:
+            traceback.print_exc()
+            time.sleep(30)
+        else:
+            time.sleep(1200)
+
+def run_in_thread(fn):
+    initial_retry_delay = 5
+
+    def loop():
+        retry_delay = initial_retry_delay
+        while 1:
+            try:
+                fn()
+                retry_delay = initial_retry_delay
+            except:
+                print >>sys.stderr, "error in %r. retrying in %ds" % (fn, retry_delay)
+                traceback.print_exc()
+                time.sleep(retry_delay)
+                retry_delay = min(240, retry_delay * 1.5)
+    t = threading.Thread(target=loop)
+    t.daemon = True
+    t.start()
+
+def main():
+    from ny_product_page import product_updater
+    run_in_thread(product_updater.run_forever)
+
+    from ny_lifestyle_page import lifestyle_updater
+    run_in_thread(lifestyle_updater.run_forever)
+
+    from ny_dressfm_page import dressfm_updater
+    run_in_thread(dressfm_updater.run_forever)
+
+    run_in_thread(join_screen_group)
+    run_in_thread(fetch_i18n)
+    while 1:
+        time.sleep(1000)
+
+if __name__ == "__main__":
+    main()

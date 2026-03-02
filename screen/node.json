@@ -1,0 +1,60 @@
+{
+    "name": "Screen Groups",
+    "custom_ui": "config.html",
+    "optional": [
+        ".*js$",
+        ".*html$"
+    ],
+    "options": [{
+        "title": "Content orientation",
+        "name": "orientation",
+        "ui_width": 3,
+        "type": "select",
+        "options": [
+            ["landscape", "Landscape"],
+            ["portrait", "Portrait"]
+        ],
+        "default": "landscape"
+    }, {
+        "title": "Screen Groups",
+        "name": "screens",
+        "type": "list",
+        "itemname": "Screen Group",
+        "items": [{
+            "title": "Arrangement",
+            "name": "arrangement",
+            "ui_width": 5,
+            "type": "select",
+            "options": [
+                ["default", "Single Screen"],
+                ["flipped", "Flipped Single Screen"],
+                ["2x2wall", "2x2 Wall"],
+                ["2x2wall-outwards", "2x2 Wall, outwards facing screens"],
+                ["3x3wall", "3x3 Wall"]
+            ],
+            "default": "default"
+        }, {
+            "title": "Name",
+            "name": "name",
+            "ui_width": 3,
+            "type": "string",
+            "default": ""
+        }, {
+            "title": "Time offset",
+            "name": "offset",
+            "ui_width": 3,
+            "type": "float",
+            "default": 0
+        }, {
+            "title": "Devices (from top left to bottom right)",
+            "name": "devices",
+            "type": "list",
+            "itemname": "Device",
+            "items": [{
+                "type": "device",
+                "title": "Device",
+                "name": "serial"
+            }]
+        }]
+    }]
+}

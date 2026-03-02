@@ -1,0 +1,8 @@
+{
+    "name": "Data Synchronization",
+    "custom_ui": "config.html",
+    "permissions": {
+        "network": "Need to synchronize with other devices"
+    },
+    "options": []
+}

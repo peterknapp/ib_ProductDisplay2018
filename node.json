@@ -1,0 +1,143 @@
+{
+    "name": "Playlist",
+    "custom_ui": "config.html",
+    "control_ui": "control.html",
+    "optional": [
+        "package-header.jpg",
+        "thumb-.*.png",
+        "COPYRIGHT",
+        ".*txt",
+        ".*md$",
+        ".*mp4$",
+        ".*js$",
+        ".*html$"
+    ],
+    "permissions": {
+        "network": "Has to fetch remote data"
+    },
+    "options": [{
+        "title": "Country",
+        "name": "country",
+        "ui_width": 6,
+        "type": "select",
+        "options": [
+            ["ae", "(ae) United Arab Emirates"],
+            ["am", "(am) Armenia"],
+            ["at", "(at) Austria"],
+            ["az", "(az) Azerbaijan"],
+            ["ba", "(ba) Bosnia And Herzegowina"],
+            ["be", "(be) Belgium"],
+            ["bg", "(bg) Bulgaria"],
+            ["ch", "(ch) Switzerland"],
+            ["cz", "(cz) Ceská republika"],
+            ["de", "(de) Deutschland"],
+            ["dk", "(dk) Denmark"],
+            ["ee", "(ee) Estonia"],
+            ["eg", "(eg) Egypt"],
+            ["es", "(es) Spain"],
+            ["fi", "(fi) Finland"],
+            ["fr", "(fr) France"],
+            ["ge", "(ge) Georgia"],
+            ["hr", "(hr) Croatia"],
+            ["hu", "(hu) Hungary"],
+            ["it", "(it) Italy"],
+            ["kz", "(kz) Kazakhstan"],
+            ["lt", "(lt) Lithuania"],
+            ["lu", "(lu) Luxembourg"],
+            ["lv", "(lv) Latvia"],
+            ["ma", "(ma) Marocco"],
+            ["me", "(me) Montenegro"],
+            ["mk", "(mk) Macedonia"],
+            ["nl", "(nl) Netherlands"],
+            ["no", "(no) Norway"],
+            ["pl", "(pl) Poland"],
+            ["pt", "(pt) Portugal"],
+            ["qa", "(qa) Qatar"],
+            ["ro", "(ro) Romania"],
+            ["rs", "(rs) Republika Srbija"],
+            ["ru", "(ru) Russian Federation"],
+            ["sa", "(sa) Saudi Arabia"],
+            ["se", "(se) Sweden"],
+            ["si", "(si) Slovenia"],
+            ["sk", "(sk) Slovakia (Slovak Republic)"],
+            ["ua", "(ua) Ukraine"],
+            ["us", "(us) United States of America"]
+        ],
+        "default": "de"
+    }, {
+        "title": "Language",
+        "name": "language",
+        "ui_width": 6,
+        "type": "select",
+        "options": [
+            ["de", "(de) Deutsch"],
+            ["en", "(en) Englisch"]
+        ],
+        "default": "de"
+    }, {
+        "title": "API endpoint",
+        "name": "endpoint",
+        "ui_width": 6,
+        "type": "select",
+        "options": [
+            ["api.newyorker.de",         "Live (api.newyorker.de, recommended)"],
+            ["staging-api.newyorker.de", "Staging (staging-api.newyorker.de)"]
+        ],
+        "default": "api.newyorker.de"
+    }, {
+        "title": "Playlist",
+        "name": "playlist",
+        "type": "list",
+        "itemname": "Playlist item",
+        "items": [{
+            "title": "Content Type",
+            "ui_width": 4,
+            "name": "type",
+            "type": "select",
+            "options": [
+                ["product", "Produkt"],
+                ["lifestyle", "Lifestyle"],
+                ["dressfm", "Dress FM"],
+                ["image", "Image"],
+                ["video", "Video"]
+            ],
+            "default": "image"
+        }, {
+            "title": "UUID",
+            "ui_width": 3,
+            "name": "uuid",
+            "type": "string",
+            "default": ""
+        }, {
+            "title": "Duration",
+            "ui_width": 3,
+            "name": "duration",
+            "type": "duration",
+            "default": 5
+        }, {
+            "title": "Settings",
+            "ui_width": 3,
+            "name": "settings",
+            "type": "json",
+            "default": {}
+        },
+            
+        {
+            "title": "Assets",
+            "name": "assets",
+            "type": "list",
+            "itemname": "Asset",
+            "items": [{
+                "title": "Resource",
+                "ui_width": 6,
+                "name": "file",
+                "type": "resource",
+                "valid": ["image", "video"],
+                "default": "empty.png"
+            }],
+            "default": [
+                {"file": "empty.png"}
+            ]
+        }]
+    }]
+}

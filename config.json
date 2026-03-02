@@ -1,0 +1,39 @@
+{
+    "country": "de",
+    "xendpoint": "staging-api.newyorker.de",
+    "endpoint": "api.newyorker.de",
+    "language": "de",
+    "playlist": [{
+        "uuid": "foo",
+        "duration": 10,
+        "type": "product",
+        "assets": [],
+        "settings": {
+            "mode": "single_product",
+            "gender": "female",
+            "product_id": "03.01.130.0690"
+        }
+    }, {
+        "uuid": "dress",
+        "duration": 10,
+        "type": "dressfm",
+        "assets": [],
+        "settings": {
+            "stream": "nyir-ger"
+        }
+    }, {
+        "uuid": "fnord",
+        "duration": 10,
+        "type": "product",
+        "assets": [],
+        "settings": {
+            "mode": "random_product"
+        }
+    }, {
+        "uuid": "bar",
+        "duration": 10,
+        "type": "lifestyle",
+        "assets": [],
+        "settings": {}
+    }]
+}

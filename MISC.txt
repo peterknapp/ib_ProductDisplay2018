@@ -1,0 +1,7 @@
+# 6K
+convert 6k-source.jpg -scale 1920x1080 image.jpg
+convert 6k-source.jpg -scale 3840x2160 image-4k.jpg
+convert image-4k.jpg -crop 1920x1080 image-2x2-%d.jpg
+convert 6k-source.jpg -crop 1920x1080 image-3x3-%d.jpg
+
+# -ss 00:00:50 -t 00:00:10 

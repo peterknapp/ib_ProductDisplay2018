@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html>
+  <!-- 
+
+  You can edit and test this configuration interface locally.
+  Just run (for example):
+
+    python -m SimpleHTTPServer
+
+  and point your browser to
+  
+    http://localhost:8000/config.html
+
+  You can learn more about custom configuration interfaces
+  at https://info-beamer.com/doc/package-reference#customconfigurationinterface
+
+  -->
+  <head>
+    <meta charset="UTF-8">
+    <style>
+      h3 {
+        margin-top: 0;
+      }
+      .handle {
+        display: inline-block;
+        background: URL(data:image/gif;base64,R0lGODlhGAAEAIABAIWFhf///yH5BAEKAAEALAAAAAAYAAQAAAIPjB8AprwIUUtvxouz3qYAADs=) repeat left top;
+        width: 20px;
+        min-height: 30px;
+        cursor: move;
+        margin-top: 5px;
+        float: left;
+      }
+      .drag-target {
+        display: block;
+        min-height: 30px;
+        border: 1px solid #ddd;
+        background-color: #f8f8f8;
+        margin-bottom: 10px;
+      }
+      .form-control {
+        max-width: 200px;
+        display: inline-block;
+      }
+      .form-control.full-width {
+        max-width: inherit;
+      }
+      .form-control.no-scroll {
+        overflow: hidden;
+      }
+      .playlist-item {
+        border: 1px solid #ddd;
+        background-color: #fdfdfd;
+        border-radius: 3px;
+        margin-bottom: 10px;
+        padding-top: 5px;
+      }
+      .playlist-item .del {
+        float: right;
+        margin-right: 5px;
+      }
+      .item-detail {
+        padding-left: 30px;
+        min-height: 74px;
+        padding-right: 15px;
+      }
+      .item-detail .thumb {
+        width: 64px;
+        height: 64px;
+        background-color: #ddd;
+        float: left;
+        margin: 2px;
+        margin-right: 8px;
+      }
+      .item-detail .settings {
+        padding-top: 10px;
+        padding-bottom: 10px;
+        margin-top: 5px;
+        margin-bottom: 10px;
+      }
+      .item-detail .qual {
+        color: red;
+      }
+      .asset-list {
+        max-height: 600px;
+        overflow-y: scroll;
+      }
+      .asset-list table {
+        margin-bottom: 0;
+      }
+      .asset-list::-webkit-scrollbar {
+        width: 12px;
+      }
+      .asset-list::-webkit-scrollbar-track {
+        background-color: #eee;
+      }
+      .asset-list::-webkit-scrollbar-thumb {
+        background-color: #ccc;
+      }
+      .asset-item {
+        cursor: pointer;
+      }
+      .asset-item td {
+        border: 1px solid #eee;
+        background-color: #f8f8f8;
+      }
+      .duration {
+        width: 80px;
+        background-color: transparent;
+        border: 1px solid #eee;
+        padding-left: 5px;
+        text-align: right;
+      }
+      .duration:focus {
+        outline: none;
+      }
+      .duration.invalid {
+        border: 1px solid red;
+      }
+      .external {
+        background-image: linear-gradient(transparent,transparent), url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22%3E %3Cpath fill=%22%23fff%22 stroke=%22%2337b%22 d=%22M1.5 4.518h5.982V10.5H1.5z%22/%3E %3Cpath fill=%22%2337b%22 d=%22M5.765 1H11v5.39L9.427 7.937l-1.31-1.31L5.393 9.35l-2.69-2.688 2.81-2.808L4.2 2.544z%22/%3E %3Cpath fill=%22%23fff%22 d=%22M9.995 2.004l.022 4.885L8.2 5.07 5.32 7.95 4.09 6.723l2.882-2.88-1.85-1.852z%22/%3E %3C/svg%3E");
+        background-position: center right;
+        background-repeat: no-repeat;
+        padding-right: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id='app'>
+      <div class='row'>
+        <div class='col-xs-12'>
+          <config-ui>Loading...</config-ui>
+        </div>
+      </div>
+    </div>
+
+    <script type="text/x-template" id="config-ui">
+      <div>
+        <playlist-editor/>
+      </div>
+    </script>
+
+    <script type="text/x-template" id="playlist-editor">
+      <div class='row'>
+        <div class='col-xs-6'>
+          <h3>
+            Playlist
+            <small>{{playlist.length}} items</small>
+          </h3>
+          <div>
+            <draggable
+              :class="{'drag-target': playlist.length == 0}"
+              v-model="playlist"
+              :options="playlist_dd_options"
+            >
+              <playlist-item v-for="item, item_id in playlist" :item_id="item_id" :key="item.uuid"/>
+            </draggable>
+          </div>
+          <div v-if="playlist.length == 0" class='alert alert-info'>
+            Empty playlist. Drop assets from the right side into the above
+            box to get started.
+          </div>
+        </div>
+        <div class='col-xs-6'>
+          <h3>Assets</h3>
+          <asset-list/>
+
+          <br/>
+          <global-settings/>
+        </div>
+      </div>
+    </script>
+
+    <script type="text/x-template" id="global-settings">
+      <div class='panel panel-default'>
+        <div class='panel-heading'>
+          Playlist settings
+        </div>
+        <div class='panel-body'>
+          <p>
+            Country
+            <select class='form-control full-width' v-model='country'>
+              <option v-for="kv in country_values" :value='kv.k'>{{kv.v}}</option>
+            </select>
+          </p>
+
+          <p>
+            Language
+            <select class='form-control full-width' v-model='language'>
+              <option v-for="kv in language_values" :value='kv.k'>{{kv.v}}</option>
+            </select>
+          </p>
+
+          <p>
+            API endpoint
+            <select class='form-control full-width' v-model='endpoint'>
+              <option v-for="kv in endpoint_values" :value='kv.k'>{{kv.v}}</option>
+            </select>
+          </p>
+        </div>
+      </div>
+    </script>
+
+    <script type="text/x-template" id="playlist-item">
+      <div class='playlist-item'>
+        <span class='handle'></span>
+        <span @click="onDelete" class='del btn btn-xs btn-default'>X</span>
+
+        <div class='item-detail' v-if="item.type == 'image'">
+          <img :src="base_asset.thumb + '?size=64'" class='thumb'>
+          <b>
+            Image
+            <span class='qual'>{{base_asset.quality}}</span>
+          </b>
+          <br/>
+          <span :title="base_asset.filename">
+            {{base_asset.filename|trunc(30)}}
+          </span><br/>
+          Duration: 
+          <item-duration :item_id="item_id"/>
+        </div>
+
+        <div class='item-detail' v-if="item.type == 'video'">
+          <img :src="base_asset.thumb + '?size=64'" class='thumb'>
+          <b>
+            Video
+            <span class='qual'>{{base_asset.quality}}</span>
+          </b>
+          <br/>
+          <span :title="base_asset.filename">
+            {{base_asset.filename|trunc(30)}}
+          </span><br/>
+          Duration:
+          <item-duration :item_id="item_id"/>
+        </div>
+
+        <product-info :item_id="item_id" v-if="item.type == 'product'"/>
+        <lifestyle-info :item_id="item_id" v-if="item.type == 'lifestyle'"/>
+        <dressfm-info :item_id="item_id" v-if="item.type == 'dressfm'"/>
+      </div>
+    </script>
+
+    <script type="text/x-template" id="item-duration">
+      <span>
+        <input
+          class='duration'
+          :class="{'invalid': invalid}"
+          type='number'
+          min=5
+          max=3600
+          v-model='duration'
+        />
+        s
+        <!--  :list="'item_' + item_id"> -->
+        <datalist :id="'item_' + item_id">
+          <option :value='default_duration'>Default</option>
+          <option value='5'>5s</option>
+          <option value='10'>10s</option>
+        </datalist>
+      </span>
+    </script>
+
+    <script type="text/x-template" id="product-info">
+      <div class='item-detail'>
+        <img src="thumb-product.png" class='thumb'>
+        <b>
+          Produktinformation <span class='qual'>4K</span>
+        </b>
+        <br/>
+        Duration:
+        <item-duration :item_id="item_id"/>
+        <br clear='all'/>
+        <div class='settings'>
+          <div class='row'>
+            <div class='col-xs-6'>
+              Mode<br/>
+              <select class='form-control' v-model='mode'>
+                <option value='random_product'>Random Mode</option>
+                <option value='single_product'>One Product</option>
+              </select>
+            </div>
+          </div>
+          <br/>
+          <div class='row' v-if="mode == 'random_product'">
+            <div class='col-xs-12'>
+              Brands <small>(selecting none disables this filter)</small><br/>
+              <select class='form-control full-width no-scroll' v-model='brands' multiple :size="brand_options.length">
+                <option v-for='brand in brand_options' :value="brand">{{brand}}</option>
+              </select>
+            </div>
+          </div>
+          <div class='row' v-if="mode == 'single_product'">
+            <div class='col-xs-6'>
+              Product Id:
+              <input class='form-control' v-model='product_id' placeholder='e.g. 01.06.357.0535'>
+              <a :href='product_url' class='external' target='_new'>Product page</a>
+            </div>
+            <div class='col-xs-6'>
+              Variant Id:
+              <input class='form-control' v-model='variant_id' placeholder='e.g. 001'>
+            </div>
+          </div>
+        </div>
+      </div>
+    </script>
+
+    <script type="text/x-template" id="lifestyle-info">
+      <div class='item-detail'>
+        <img src="thumb-lifestyle.png" class='thumb'>
+        <b>
+          Lifestyle <span class='qual'>4K</span>
+        </b>
+        <br/>
+        Duration:
+        <item-duration :item_id="item_id"/>
+      </div>
+    </script>
+
+    <script type="text/x-template" id="dressfm-info">
+      <div class='item-detail'>
+        <img src="thumb-dressfm.png" class='thumb'>
+        <b>
+          DressFM In-Store Radio <span class='qual'>4K</span>
+        </b>
+        <br/>
+        Duration:
+        <item-duration :item_id="item_id"/>
+        <br clear='all'/>
+        <div class='settings'>
+          Stream<br/>
+          <select class='form-control full-width' v-model='stream'>
+            <option value='nyir-ger'>Deutschsprachiger Stream</option>
+            <option value='nyir-glob'>Internationaler Stream</option>
+          </select>
+        </div>
+      </div>
+    </script>
+
+    <script type="text/x-template" id="asset-list">
+      <div>
+        <div class='form-inline asset-filter'>
+          <div class="form-group">
+            <div class="input-group">
+              <div class="input-group-addon">
+                <span class='glyphicon glyphicon-search'></span>
+              </div>
+              <input class='form-control search'
+                placeholder="Search your assets"
+                @keyup="onSearch($event.target.value)"
+                @change="onSearch($event.target.value)"
+              >
+            </div>
+          </div>
+        </div>
+
+        <div class='form-group'>
+          <div class="btn-group">
+            <button class='btn btn-sm btn-default'
+              :class="{'btn-success': filter_type=='image'}"
+              @click='filter_type = filter_type == "image" ? "all" : "image"'>
+              <span class='glyphicon glyphicon-picture'></span>
+            </button>
+            <button class='btn btn-sm btn-default'
+              :class="{'btn-success': filter_type=='video'}"
+              @click='filter_type = filter_type == "video" ? "all" : "video"'>
+              <span class='glyphicon glyphicon-facetime-video'></span>
+            </button>
+          </div>
+
+          <div class="btn-group">
+            <button class='btn btn-sm btn-default'
+              :class="{'btn-success': filter_aspect=='16:9'}"
+              @click='filter_aspect = filter_aspect == "16:9" ? "all" : "16:9"'>
+              16:9
+            </button>
+            <button class='btn btn-sm btn-default'
+              :class="{'btn-success': filter_aspect=='9:16'}"
+              @click='filter_aspect = filter_aspect == "9:16" ? "all" : "9:16"'>
+              9:16
+            </button>
+          </div>
+
+          <div class="btn-group">
+            <button class='btn btn-sm btn-default'
+              :class="{'btn-success': sorted=='filename'}"
+              @click='sorted = "filename"'>
+              ▼
+              <span class='glyphicon glyphicon-file'></span>
+            </button>
+
+            <button class='btn btn-sm btn-default'
+              :class="{'btn-success': sorted=='upload'}"
+              @click='sorted = "upload"'>
+              ▼
+              <span class='glyphicon glyphicon-time'></span>
+            </button>
+          </div>
+        </div>
+
+        <div class='asset-list'>
+          <table class='table table-condensed table-bordered table-hover table-clickable'>
+            <draggable element='tbody' v-model="assets" :options="asset_dd_options">
+              <tr v-for='asset in assets' @click='onAppend(asset)' class='asset-item'>
+                <td>
+                  <span class='handle'></span>
+                  <img :src="asset.thumb + '?size=32'" class='thumb'>
+                  <span v-if="asset.special">
+                    {{asset.special}}
+                  </span>
+                  <span class='filename' :title="asset.filename" v-else>
+                    {{asset.filename | trunc(23)}}
+                  </span>
+                </td>
+                <td class='text-right'>
+                  <span v-if='asset.special'>
+                    Dynamic
+                  </span>
+                  <span v-if='asset.filetype == "image" && asset.metadata'>
+                    {{asset.metadata.width}} × {{asset.metadata.height}}<br/>
+                    {{asset.aspect}}<br/>
+                    {{asset.quality}}
+                  </span>
+                  <span v-if='asset.filetype == "video" && asset.metadata'>
+                    {{asset.metadata.duration.toFixed(2)}}s<br/>
+                    {{asset.aspect}}<br/>
+                    {{asset.quality}}
+                  </span>
+                </td>
+              </tr>
+            </draggable>
+          </table>
+        </div>
+      </div>
+    </script>
+
+    <script>
+      MOCK_ASSETS = {
+        2: {
+          id: 2,
+          thumb: "node.png",
+          filetype: 'image',
+          filename: 'example-image-with-a-long-name.png',
+          metadata: {width: 1920, height:1080},
+          uploaded: 1469007145,
+        },
+        3: {
+          id: 3,
+          thumb: "node.png",
+          filetype: 'video',
+          filename: 'video.mp4',
+          metadata: {duration: 123.5, width: 1920, height:1080},
+          uploaded: 1469007145,
+        },
+        4: {
+          id: 4,
+          thumb: "node.png",
+          filetype: 'video',
+          filename: 'video-2x2-0.mp4',
+          metadata: {duration: 123, width: 1920, height:1080},
+          uploaded: 1469007145,
+        },
+        5: {
+          id: 5,
+          thumb: "node.png",
+          filetype: 'video',
+          filename: 'video-2x2-1.mp4',
+          metadata: {duration: 123, width: 1920, height:1080},
+          uploaded: 1469007145,
+        },
+        6: {
+          id: 6,
+          thumb: "node.png",
+          filetype: 'video',
+          filename: 'video-2x2-2.mp4',
+          metadata: {duration: 123, width: 1920, height:1080},
+          uploaded: 1469007145,
+        },
+        7: {
+          id: 7,
+          thumb: "node.png",
+          filetype: 'video',
+          filename: 'video-2x2-3.mp4',
+          metadata: {duration: 123, width: 1920, height:1080},
+          uploaded: 1469007145,
+        },
+      }
+      MOCK_DEVICES = [],
+      MOCK_NODE_ASSETS = {
+      },
+      MOCK_CONFIG = {
+        country: 'de',
+        endpoint: 'api.newyorker.de',
+        language: 'de',
+        playlist: [{
+            type: 'product',
+            duration: 1,
+            settings: {},
+            assets: [],
+        }, {
+            type: 'product',
+            duration: 2,
+            settings: {},
+            assets: [],
+        }]
+      }
+    </script>
+    <script src="hosted.js"></script>
+    <script src="vue.js"></script>
+    <script src="vuex.js"></script>
+    <script src="Sortable.js"></script>
+    <script src="vuedraggable.min.js"></script>
+    <script src="config.js"></script>
+  </body>
+</html>

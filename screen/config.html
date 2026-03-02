@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html>
+  <!-- 
+
+  You can edit and test this configuration interface locally.
+  Just run (for example):
+
+    python -m SimpleHTTPServer
+
+  and point your browser to
+  
+    http://localhost:8000/config.html
+
+  You can learn more about custom configuration interfaces
+  at https://info-beamer.com/doc/package-reference#customconfigurationinterface
+
+  -->
+  <head>
+    <meta charset="UTF-8">
+    <style>
+      h3 {
+        margin-top: 0;
+      }
+      .handle {
+        display: inline-block;
+        background: URL(data:image/gif;base64,R0lGODlhGAAEAIABAIWFhf///yH5BAEKAAEALAAAAAAYAAQAAAIPjB8AprwIUUtvxouz3qYAADs=) repeat left top;
+        width: 24px;
+        height: 20px;
+                margin-bottom: -7px;
+        cursor: move;
+        margin-right: 10px;
+      }
+      .device-assignment {
+        margin: 2px;
+        display: inline-block;
+        padding: 10px;
+      }
+      .device-assignment.rot-0 {
+        width: 200px;
+        height: 137px;
+        background-image: url(screen-rot0.png);
+      }
+      .device-assignment.rot-90 {
+        width: 137px;
+        height: 200px;
+        background-image: url(screen-rot90.png);
+      }
+      .device-assignment.rot-180 {
+        width: 200px;
+        height: 137px;
+        background-image: url(screen-rot180.png);
+      }
+      .device-assignment.rot-270 {
+        width: 137px;
+        height: 200px;
+        background-image: url(screen-rot270.png);
+      }
+      .form-control {
+        max-width: 200px;
+        display: inline-block;
+      }
+      .option-offset {
+        width: 120px;
+         text-align: right;
+      }
+      .screen-group {
+        border: 1px solid #ddd;
+        background-color: #eee;
+        padding: 5px;
+        border-radius: 5px;
+        margin-bottom: 10px;
+      }
+      .delete-group {
+        float: right;
+      }
+    </style>
+  </head>
+  <body>
+    <div id='app'>
+      <div class='row'>
+        <div class='col-xs-12'>
+          <config-ui>Loading...</config-ui>
+        </div>
+      </div>
+    </div>
+
+    <script type="text/x-template" id="config-ui">
+      <div>
+        <h3>Screen Groups</h3>
+
+        <p>
+          Configure all video wall setups/special screen arrangements here. If a device is
+          assigned to this setup and not configured here, it will show the complete content.
+        </p>
+
+        <screen-groups/>
+
+        <h3>Content Orientation</h3>
+
+        <p>
+          Determines the orientation of all your assets/content on the screen. Do not change
+          unless you update your complete playlist to reflect the new aspect ratio.
+        </p>
+
+        <select class='form-control' v-model='orientation'>
+          <option value='landscape'>Landscape</option>
+          <option value='portrait'>Portait</option>
+        </select>
+      </div>
+    </script>
+
+    <script type="text/x-template" id="screen-groups">
+      <div>
+        <div v-for="group, group_id in screens">
+          <group-editor :group_id="group_id"/>
+        </div>
+
+        <div class='text-right button-row'>
+          <button class='btn btn-default' @click="onAdd">
+            <span class='glyphicon glyphicon-plus'></span>
+            Add Screen Group
+          </button>
+        </div>
+      </div>
+    </script>
+
+    <script type="text/x-template" id="group-editor">
+      <div class='screen-group'>
+        <select class='form-control' v-model='arrangement'>
+          <option
+            v-for='a in arrangements'
+            :value='a.value'
+          >{{a.name}}</option>
+        </select>
+        <input
+          class='form-control'
+          v-model='name'
+          placeholder="Name of this group"
+        />
+        &nbsp;
+        Time offset:
+        <input
+          class='form-control option-offset'
+          type='number'
+          v-model='offset'
+          step="0.1"
+          placeholder="Time offset"
+        />
+        <button class='btn btn-small delete-group' @click='onDelete'>
+          X
+        </button>
+        <br/><br/>
+        <div v-if="arrangement == 'default' && orientation == 'landscape'">
+          <device-assignment :group_id="group_id" :idx='0' :rotation='0'/>
+        </div>
+        <div v-if="arrangement == 'default' && orientation == 'portrait'">
+          <device-assignment :group_id="group_id" :idx='0' :rotation='90'/>
+        </div>
+        <div v-if="arrangement == 'flipped' && orientation == 'landscape'">
+          <device-assignment :group_id="group_id" :idx='0' :rotation='180'/>
+        </div>
+        <div v-if="arrangement == 'flipped' && orientation == 'portrait'">
+          <device-assignment :group_id="group_id" :idx='0' :rotation='270'/>
+        </div>
+        <div v-if="arrangement == '2x2wall' && orientation == 'landscape'">
+          <device-assignment :group_id="group_id" :idx='0' :rotation='0'/>
+          <device-assignment :group_id="group_id" :idx='1' :rotation='0'/>
+          <br/>
+          <device-assignment :group_id="group_id" :idx='2' :rotation='0'/>
+          <device-assignment :group_id="group_id" :idx='3' :rotation='0'/>
+        </div>
+        <div v-if="arrangement == '2x2wall' && orientation == 'portrait'">
+          <device-assignment :group_id="group_id" :idx='0' :rotation='90'/>
+          <device-assignment :group_id="group_id" :idx='1' :rotation='90'/>
+          <br/>
+          <device-assignment :group_id="group_id" :idx='2' :rotation='90'/>
+          <device-assignment :group_id="group_id" :idx='3' :rotation='90'/>
+        </div>
+        <div v-if="arrangement == '3x3wall' && orientation == 'landscape'">
+          <device-assignment :group_id="group_id" :idx='0' :rotation='0'/>
+          <device-assignment :group_id="group_id" :idx='1' :rotation='0'/>
+          <device-assignment :group_id="group_id" :idx='2' :rotation='0'/>
+          <br/>
+          <device-assignment :group_id="group_id" :idx='3' :rotation='0'/>
+          <device-assignment :group_id="group_id" :idx='4' :rotation='0'/>
+          <device-assignment :group_id="group_id" :idx='5' :rotation='0'/>
+          <br/>
+          <device-assignment :group_id="group_id" :idx='6' :rotation='0'/>
+          <device-assignment :group_id="group_id" :idx='7' :rotation='0'/>
+          <device-assignment :group_id="group_id" :idx='8' :rotation='0'/>
+        </div>
+        <div v-if="arrangement == '3x3wall' && orientation == 'portrait'">
+          <device-assignment :group_id="group_id" :idx='0' :rotation='90'/>
+          <device-assignment :group_id="group_id" :idx='1' :rotation='90'/>
+          <device-assignment :group_id="group_id" :idx='2' :rotation='90'/>
+          <br/>
+          <device-assignment :group_id="group_id" :idx='3' :rotation='90'/>
+          <device-assignment :group_id="group_id" :idx='4' :rotation='90'/>
+          <device-assignment :group_id="group_id" :idx='5' :rotation='90'/>
+          <br/>
+          <device-assignment :group_id="group_id" :idx='6' :rotation='90'/>
+          <device-assignment :group_id="group_id" :idx='7' :rotation='90'/>
+          <device-assignment :group_id="group_id" :idx='8' :rotation='90'/>
+        </div>
+        <div v-if="arrangement == '2x2wall-outwards' && orientation == 'landscape'">
+          <div class='alert alert-warning'>Landscape orientation not supported</div>
+        </div>
+        <div v-if="arrangement == '2x2wall-outwards' && orientation == 'portrait'">
+          <device-assignment :group_id="group_id" :idx='0' :rotation='270'/>
+          <device-assignment :group_id="group_id" :idx='1' :rotation='90'/>
+          <br/>
+          <device-assignment :group_id="group_id" :idx='2' :rotation='270'/>
+          <device-assignment :group_id="group_id" :idx='3' :rotation='90'/>
+        </div>
+      </div>
+    </script>
+
+    <script type="text/x-template" id="device-assignment">
+      <div class='device-assignment' :class='css'>
+        <select class='form-control' v-model='serial'>
+          <option
+            v-for='device in devices'
+            :value="device.serial"
+          >{{device.description}}</option>
+        </select>
+      </div>
+    </script>
+
+    <script>
+      MOCK_ASSETS = {
+        2: {
+          id: 2,
+          thumb: "node.png",
+          filetype: 'image',
+          filename: 'node.png',
+          uploaded: 1469007145,
+        }
+      }
+      MOCK_DEVICES = [{
+        "id": 2616,
+        "location": "",
+        "description": "CM3 (Data Display)",
+        "serial": "3417988369",
+        "is_online": false,
+        "assigned": false
+      },
+      {
+        "id": 2477,
+        "location": "",
+        "description": "CM3 (NEC)",
+        "serial": "252719011",
+        "is_online": false,
+        "assigned": false
+      },
+      {
+        "id": 3277,
+        "location": "",
+        "description": "Pi1",
+        "serial": "2429607372",
+        "is_online": false,
+        "assigned": false
+      },
+      {
+        "id": 3269,
+        "location": "",
+        "description": "Pi2",
+        "serial": "1630339435",
+        "is_online": false,
+        "assigned": false
+      },
+      {
+        "id": 3278,
+        "location": "",
+        "description": "Pi3",
+        "serial": "364665714",
+        "is_online": true,
+        "assigned": true
+      },
+      {
+        "id": 3246,
+        "location": "",
+        "description": "Pi3 B+ (Rechts)",
+        "serial": "996321607",
+        "is_online": true,
+        "assigned": true
+      }],
+      MOCK_NODE_ASSETS = {
+      },
+      MOCK_CONFIG = {
+        orientation: "portrait",
+        screens: [{
+          arrangement: "2x2wall",
+          offset: 0,
+          devices: [{serial: "364665714"}],
+        }],
+      }
+    </script>
+    <script src="hosted.js"></script>
+    <script src="vue.js"></script>
+    <script src="vuex.js"></script>
+    <script src="config.js"></script>
+  </body>
+</html>
