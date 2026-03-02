@@ -630,9 +630,9 @@ local function Product(play_state, item)
             if content_area.is_landscape() then
                 ny_assets.pi.background:draw(0, 0, 1920, 2160)
                 helper.img_centered(brand_image, 2900, 420,  1000, 500)
-                if product_title ~= '' then
-                    helper.centered_text(ny_assets.font.regl, 2900, 680, product_title, 44, .2,.2,.2,1)
-                end
+                local title_line = product_title ~= '' and product_title or ("ID: " .. tostring(product.id or "?"))
+                ny_assets.pi.black:draw(2350, 640, 3450, 725, 0.75)
+                helper.centered_text(ny_assets.font.bold, 2900, 655, title_line, 44, 1,1,1,1)
                 helper.img_centered(product_image, 1050, 1100, 1650, 1650)
                 qrcode_image:draw(40, 40, 320, 320)
                 price_box(0, 1417)
@@ -644,9 +644,9 @@ local function Product(play_state, item)
             else
                 ny_assets.pi.background:draw(0, HEIGHT/2, WIDTH, HEIGHT)
                 helper.img_centered(brand_image, 1780, 200,  500, 380)
-                if product_title ~= '' then
-                    helper.centered_text(ny_assets.font.regl, 1780, 430, product_title, 44, .2,.2,.2,1)
-                end
+                local title_line = product_title ~= '' and product_title or ("ID: " .. tostring(product.id or "?"))
+                ny_assets.pi.black:draw(1230, 390, 2330, 475, 0.75)
+                helper.centered_text(ny_assets.font.bold, 1780, 405, title_line, 44, 1,1,1,1)
                 helper.img_centered(product_image, 1080, 1250, 1900, 1700)
                 qrcode_image:draw(40, 40, 320, 320)
                 price_box(0, 1500)
