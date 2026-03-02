@@ -91,6 +91,12 @@
         "type": "boolean",
         "default": false
     }, {
+        "title": "Product Refresh (seconds)",
+        "name": "product_refresh_seconds",
+        "ui_width": 6,
+        "type": "integer",
+        "default": 30
+    }, {
         "title": "Playlist",
         "name": "playlist",
         "type": "list",

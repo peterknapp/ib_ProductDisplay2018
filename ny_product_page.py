@@ -1,4 +1,4 @@
-import json, os, random, sys, time
+import json, os, sys, time
 from itertools import islice
 from ny_util import http, SlotUpdater, render_short_link_qr_png
 
@@ -8,6 +8,18 @@ class ProductUpdater(SlotUpdater):
             self._brand_mapping = json.load(f)
         if not hasattr(self, "_last_random_product_by_slot"):
             self._last_random_product_by_slot = {}
+        if not hasattr(self, "_rotation_index_by_slot"):
+            self._rotation_index_by_slot = {}
+
+        # Allow predictable product rotation cadence via setup option.
+        try:
+            with file("config.json", "rb") as f:
+                config = json.load(f)
+            refresh_seconds = int(config.get("product_refresh_seconds", 30))
+            self._refresh_interval = max(5, min(300, refresh_seconds))
+        except Exception as err:
+            print >>sys.stderr, "failed to parse product_refresh_seconds: %r" % (err,)
+            self._refresh_interval = 30
 
     def _file_bytes(self, path):
         with file(path, "rb") as f:
@@ -137,24 +149,27 @@ class ProductUpdater(SlotUpdater):
 
         return ""
 
-    def _pick_non_repeating_product(self, products, slot_key):
+    def _pick_rotating_product(self, products, slot_key):
         if not products:
             raise ValueError("cannot pick from empty product list")
         if len(products) == 1:
-            return products[0]
+            chosen = products[0]
+            chosen_id = self._extract_product_id(chosen)
+            if chosen_id:
+                self._last_random_product_by_slot[slot_key] = chosen_id
+            return chosen
 
-        last_id = self._last_random_product_by_slot.get(slot_key, "")
-        candidates = []
-        for product in products:
+        def sort_key(product):
             product_id = self._extract_product_id(product)
-            if product_id and product_id == last_id:
-                continue
-            candidates.append(product)
+            if product_id:
+                return product_id
+            return json.dumps(product, sort_keys=True)
 
-        if not candidates:
-            candidates = products
-
-        chosen = random.choice(candidates)
+        products = sorted(products, key=sort_key)
+        idx = self._rotation_index_by_slot.get(slot_key, -1) + 1
+        idx = idx % len(products)
+        self._rotation_index_by_slot[slot_key] = idx
+        chosen = products[idx]
         chosen_id = self._extract_product_id(chosen)
         if chosen_id:
             self._last_random_product_by_slot[slot_key] = chosen_id
@@ -408,9 +423,9 @@ class ProductUpdater(SlotUpdater):
                             scored.sort(key=lambda item: item[0], reverse=True)
                             top_score = scored[0][0]
                             top_products = [product for score, product in scored if score == top_score]
-                            return self._pick_non_repeating_product(top_products, slot_key)
+                            return self._pick_rotating_product(top_products, slot_key)
 
-                        return self._pick_non_repeating_product(products, slot_key)
+                        return self._pick_rotating_product(products, slot_key)
                     except Exception as err:
                         errors.append("%s %s params=%r: %r" % (url, method, params, err))
 
@@ -525,7 +540,7 @@ class ProductUpdater(SlotUpdater):
                             limit = 20,
                         )
                         if matching:
-                            product = self._pick_non_repeating_product(matching, slot_key)
+                            product = self._pick_rotating_product(matching, slot_key)
                             # Enrich to stable full payload when possible.
                             product_id = self._extract_product_id(product)
                             if product_id:
@@ -681,7 +696,7 @@ class ProductUpdater(SlotUpdater):
 
 product_updater = ProductUpdater(
     item_type = 'product',
-    refresh_interval = 120,
+    refresh_interval = 30,
 )
 
 if __name__ == "__main__":

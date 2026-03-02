@@ -320,6 +320,7 @@ Vue.component('global-settings', {
     country: config_value('country', 'de'),
     language: config_value('language', 'de'),
     debug_overlay: config_value('debug_overlay', false),
+    product_refresh_seconds: config_value('product_refresh_seconds', 30),
 
     endpoint_values: values_from_nodejson('endpoint'),
     country_values: values_from_nodejson('country'),
