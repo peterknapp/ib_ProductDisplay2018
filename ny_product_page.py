@@ -52,7 +52,13 @@ class ProductUpdater(SlotUpdater):
 
     def _extract_products_from_payload(self, payload):
         if isinstance(payload, list):
-            return [p for p in payload if isinstance(p, dict)]
+            products = []
+            for item in payload:
+                if isinstance(item, dict):
+                    products.append(item)
+                elif isinstance(item, basestring) and item.strip():
+                    products.append({'id': item.strip()})
+            return products
 
         if not isinstance(payload, dict):
             return []
@@ -79,6 +85,55 @@ class ProductUpdater(SlotUpdater):
             products.append(payload)
 
         return products
+
+    def _extract_product_id(self, product):
+        if not isinstance(product, dict):
+            return ""
+
+        for key in ("id", "product_id", "productId"):
+            value = product.get(key)
+            if isinstance(value, basestring) and value.strip():
+                return value.strip()
+
+        nested = product.get("product")
+        if isinstance(nested, dict):
+            for key in ("id", "product_id", "productId"):
+                value = nested.get(key)
+                if isinstance(value, basestring) and value.strip():
+                    return value.strip()
+
+        return ""
+
+    def _extract_random_product_ids(self, payload):
+        ids = []
+        seen = set()
+
+        def add(candidate):
+            if not isinstance(candidate, basestring):
+                return
+            candidate = candidate.strip()
+            if not candidate or candidate in seen:
+                return
+            seen.add(candidate)
+            ids.append(candidate)
+
+        def walk(value, parent_key=""):
+            if isinstance(value, dict):
+                for key, sub in value.items():
+                    normalized = str(key).strip().lower()
+                    if normalized in ("id", "product_id", "productid"):
+                        add(sub)
+                    walk(sub, normalized)
+            elif isinstance(value, list):
+                for item in value:
+                    walk(item, parent_key)
+            elif isinstance(value, basestring):
+                # Accept plain string lists of product ids if we are under a likely id key.
+                if parent_key in ("ids", "product_ids", "productids"):
+                    add(value)
+
+        walk(payload)
+        return ids
 
     def _select_variant(self, product, requested_variant):
         variants = self._variants_from_product(product)
@@ -224,17 +279,26 @@ class ProductUpdater(SlotUpdater):
                     timeout = 5
                 )
                 r.raise_for_status()
-                products = self._extract_products_from_payload(r.json())
+                payload = r.json()
+                products = self._extract_products_from_payload(payload)
                 if not products:
+                    product_ids = self._extract_random_product_ids(payload)
+                    if product_ids:
+                        return {'id': product_ids[0]}
                     errors.append("empty product list from %s" % (url,))
                     continue
 
                 # Prefer products with non-coming-soon variants and usable images.
                 scored = []
                 for product in products:
+                    product_id = self._extract_product_id(product)
                     try:
                         variant = self._select_variant(product, "")
                     except Exception:
+                        # Product without embedded variants might still be usable after
+                        # we enrich it with product/<id> in generate_slot.
+                        if product_id:
+                            scored.append((1, product))
                         continue
 
                     images = variant.get("images")
@@ -245,6 +309,8 @@ class ProductUpdater(SlotUpdater):
                     if has_images:
                         score += 2
                     if not coming_soon:
+                        score += 1
+                    if product_id:
                         score += 1
                     scored.append((score, product))
 
@@ -312,7 +378,7 @@ class ProductUpdater(SlotUpdater):
             brands = slot_settings.get('brands', [])
             try:
                 random_product = self._fetch_random_product(brands)
-                random_product_id = random_product.get('id') or ""
+                random_product_id = self._extract_product_id(random_product)
                 if random_product_id:
                     try:
                         product = self._fetch_product_by_id(random_product_id)
