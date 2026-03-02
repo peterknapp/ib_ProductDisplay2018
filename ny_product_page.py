@@ -246,7 +246,7 @@ class ProductUpdater(SlotUpdater):
             return "random_product"
         return "random_product"
 
-    def _fetch_random_product(self, brands):
+    def _fetch_random_product(self, brands, slot_settings):
         if isinstance(brands, basestring):
             brands = [brands] if brands.strip() else []
         if not isinstance(brands, list):
@@ -257,6 +257,8 @@ class ProductUpdater(SlotUpdater):
             # Ask for multiple candidates so we can choose a displayable one.
             'limit': 10,
         }
+        gender = (slot_settings.get('gender', 'female') or 'female').strip().lower()
+        customer_group = "MALE" if gender == "male" else "FEMALE"
 
         endpoints = [
             "https://%s/csp/products/public/products/randomCollectionProducts" % (self._endpoint,),
@@ -269,64 +271,90 @@ class ProductUpdater(SlotUpdater):
 
         errors = []
         param_variants = []
+
+        # Broad compatibility for backend variants.
+        enriched = dict(base_params)
+        enriched['gender'] = gender
+        enriched['customerGroup'] = customer_group
+        enriched['customer_group'] = customer_group
+        enriched['language'] = (self._language or 'de')
+        param_variants.append(enriched)
+
+        enriched_short = dict(base_params)
+        enriched_short['gender'] = gender
+        enriched_short['language'] = (self._language or 'de')
+        param_variants.append(enriched_short)
+
         if brands:
             print >>sys.stderr, 'brand filter active: %r' % (brands,)
             with_brand = dict(base_params)
             with_brand['brand'] = ','.join(brands)
             param_variants.append(with_brand)
+
+            with_brand_enriched = dict(enriched)
+            with_brand_enriched['brand'] = ','.join(brands)
+            param_variants.insert(0, with_brand_enriched)
         param_variants.append(base_params)
 
         for url in endpoints:
             for params in param_variants:
-                try:
-                    r = http.get(
-                        url = url,
-                        params = params,
-                        timeout = 5
-                    )
-                    r.raise_for_status()
-                    payload = r.json()
-                    products = self._extract_products_from_payload(payload)
-                    if not products:
-                        product_ids = self._extract_random_product_ids(payload)
-                        if product_ids:
-                            return {'id': product_ids[0]}
-                        errors.append("empty product list from %s params=%r" % (url, params))
-                        continue
-
-                    # Prefer products with non-coming-soon variants and usable images.
-                    scored = []
-                    for product in products:
-                        product_id = self._extract_product_id(product)
-                        try:
-                            variant = self._select_variant(product, "")
-                        except Exception:
-                            # Product without embedded variants might still be usable after
-                            # we enrich it with product/<id> in generate_slot.
-                            if product_id:
-                                scored.append((1, product))
+                for method in ("get", "post"):
+                    try:
+                        if method == "get":
+                            r = http.get(
+                                url = url,
+                                params = params,
+                                timeout = 5
+                            )
+                        else:
+                            r = http.post(
+                                url = url,
+                                data = params,
+                                timeout = 5
+                            )
+                        r.raise_for_status()
+                        payload = r.json()
+                        products = self._extract_products_from_payload(payload)
+                        if not products:
+                            product_ids = self._extract_random_product_ids(payload)
+                            if product_ids:
+                                return {'id': product_ids[0]}
+                            errors.append("empty product list from %s %s params=%r" % (url, method, params))
                             continue
 
-                        images = variant.get("images")
-                        has_images = isinstance(images, list) and len(images) > 0
-                        coming_soon = bool(variant.get("coming_soon", False))
+                        # Prefer products with non-coming-soon variants and usable images.
+                        scored = []
+                        for product in products:
+                            product_id = self._extract_product_id(product)
+                            try:
+                                variant = self._select_variant(product, "")
+                            except Exception:
+                                # Product without embedded variants might still be usable after
+                                # we enrich it with product/<id> in generate_slot.
+                                if product_id:
+                                    scored.append((1, product))
+                                continue
 
-                        score = 0
-                        if has_images:
-                            score += 2
-                        if not coming_soon:
-                            score += 1
-                        if product_id:
-                            score += 1
-                        scored.append((score, product))
+                            images = variant.get("images")
+                            has_images = isinstance(images, list) and len(images) > 0
+                            coming_soon = bool(variant.get("coming_soon", False))
 
-                    if scored:
-                        scored.sort(key=lambda item: item[0], reverse=True)
-                        return scored[0][1]
+                            score = 0
+                            if has_images:
+                                score += 2
+                            if not coming_soon:
+                                score += 1
+                            if product_id:
+                                score += 1
+                            scored.append((score, product))
 
-                    return products[0]
-                except Exception as err:
-                    errors.append("%s params=%r: %r" % (url, params, err))
+                        if scored:
+                            scored.sort(key=lambda item: item[0], reverse=True)
+                            return scored[0][1]
+
+                        return products[0]
+                    except Exception as err:
+                        errors.append("%s %s params=%r: %r" % (url, method, params, err))
 
         raise ValueError("random product fetch failed: %s" % (" | ".join(errors),))
 
@@ -383,7 +411,7 @@ class ProductUpdater(SlotUpdater):
         if mode == 'random_product':
             brands = slot_settings.get('brands', [])
             try:
-                random_product = self._fetch_random_product(brands)
+                random_product = self._fetch_random_product(brands, slot_settings)
                 random_product_id = self._extract_product_id(random_product)
                 if random_product_id:
                     try:
