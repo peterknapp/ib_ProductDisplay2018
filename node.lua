@@ -431,6 +431,14 @@ local function Product(play_state, item)
     local product_title = ''
     local matching_products = {}
     local debug_line_1, debug_line_2 = "", ""
+    local function safe_load_image(loader, name)
+        local ok, img = pcall(loader, name)
+        if ok then
+            return img
+        end
+        print("safe_load_image failed", name, img)
+        return nil
+    end
 
     local function tick(now)
         local now, on_screen, from_start, to_end = play_state.get(now)
@@ -443,9 +451,9 @@ local function Product(play_state, item)
                     return
                 end
 
-                product_image = product_assets.load_image(product.img_product)
-                brand_image = product_assets.load_image(product.img_brand)
-                qrcode_image = product_assets.load_image(product.img_qrcode)
+                product_image = safe_load_image(product_assets.load_image, product.img_product)
+                brand_image = safe_load_image(product_assets.load_image, product.img_brand)
+                qrcode_image = safe_load_image(product_assets.load_image, product.img_qrcode)
 
                 if product.current_price then
                     price = helper.format_price(product.currency, product.current_price)
@@ -472,7 +480,7 @@ local function Product(play_state, item)
                 for idx = 1, #product.matching do
                     local matching = product.matching[idx]
                     matching_products[#matching_products+1] = {
-                        image = product_assets.load_image(matching.img_product),
+                        image = safe_load_image(product_assets.load_image, matching.img_product),
                         price = matching.current_price and helper.format_price_no_currency(
                             product.currency, matching.current_price
                         ),
@@ -599,10 +607,12 @@ local function Product(play_state, item)
                 for idx = 1, #matching_products do
                     local matching_product = matching_products[idx]
                     ny_assets.pi.gradient:draw(px+margin/2, py, px+margin/2+product_w, py+product_h)
-                    util.draw_correct(matching_product.image, 
-                        px+margin/2+img_padding, py+img_padding,
-                        px+margin/2+product_w-img_padding, py+product_h-img_padding
-                    )
+                    if matching_product.image then
+                        util.draw_correct(matching_product.image, 
+                            px+margin/2+img_padding, py+img_padding,
+                            px+margin/2+product_w-img_padding, py+product_h-img_padding
+                        )
+                    end
 
                     if matching_product.price then
                         local font = ny_assets.font.bold
@@ -629,7 +639,9 @@ local function Product(play_state, item)
 
             if content_area.is_landscape() then
                 ny_assets.pi.background:draw(0, 0, 1920, 2160)
-                helper.img_centered(brand_image, 2900, 420,  1000, 500)
+                if brand_image then
+                    helper.img_centered(brand_image, 2900, 420,  1000, 500)
+                end
                 local title_line = product_title ~= '' and product_title or ("ID: " .. tostring(product.id or "?"))
                 ny_assets.pi.black:draw(2350, 640, 3450, 725, 0.75)
                 helper.centered_text(ny_assets.font.bold, 2900, 655, title_line, 44, 1,1,1,1)
@@ -641,8 +653,12 @@ local function Product(play_state, item)
                     ny_assets.font.regl:write(2360, 744, d1, 26, 1,1,1,1)
                     ny_assets.font.regl:write(2360, 799, d2, 26, 1,1,1,1)
                 end
-                helper.img_centered(product_image, 1050, 1100, 1650, 1650)
-                qrcode_image:draw(40, 40, 320, 320)
+                if product_image then
+                    helper.img_centered(product_image, 1050, 1100, 1650, 1650)
+                end
+                if qrcode_image then
+                    qrcode_image:draw(40, 40, 320, 320)
+                end
                 price_box(0, 1417)
 
                 if #matching_products > 0 then
@@ -651,7 +667,9 @@ local function Product(play_state, item)
                 render_debug_overlay()
             else
                 ny_assets.pi.background:draw(0, HEIGHT/2, WIDTH, HEIGHT)
-                helper.img_centered(brand_image, 1780, 200,  500, 380)
+                if brand_image then
+                    helper.img_centered(brand_image, 1780, 200,  500, 380)
+                end
                 local title_line = product_title ~= '' and product_title or ("ID: " .. tostring(product.id or "?"))
                 ny_assets.pi.black:draw(1230, 390, 2330, 475, 0.75)
                 helper.centered_text(ny_assets.font.bold, 1780, 405, title_line, 44, 1,1,1,1)
@@ -663,8 +681,12 @@ local function Product(play_state, item)
                     ny_assets.font.regl:write(1240, 494, d1, 26, 1,1,1,1)
                     ny_assets.font.regl:write(1240, 549, d2, 26, 1,1,1,1)
                 end
-                helper.img_centered(product_image, 1080, 1250, 1900, 1700)
-                qrcode_image:draw(40, 40, 320, 320)
+                if product_image then
+                    helper.img_centered(product_image, 1080, 1250, 1900, 1700)
+                end
+                if qrcode_image then
+                    qrcode_image:draw(40, 40, 320, 320)
+                end
                 price_box(0, 1500)
 
                 if #matching_products > 0 then
