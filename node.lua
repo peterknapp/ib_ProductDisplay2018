@@ -929,6 +929,7 @@ local debug_overlay_enabled = false
 local debug_overlay_root = false
 local debug_global_line_1 = ""
 local debug_global_line_2 = ""
+local debug_overlay_force = true
 
 local function is_enabled(value)
     if value == true then
@@ -1055,15 +1056,15 @@ function node.render()
     screen.setup()
     playlist.play(time.get())
 
-    if debug_overlay_enabled then
+    if debug_overlay_enabled or debug_overlay_force then
         gl.ortho()
-        test_assets.red:draw(0, 0, 120, 34, 0.75)
-        test_assets.font:write(8, 8, "DBG ON", 18, 1,1,1,1)
+        test_assets.red:draw(0, 0, 260, 40, 0.85)
+        test_assets.font:write(8, 10, "DBG FORCE ON", 20, 1,1,1,1)
 
         local line1 = debug_global_line_1 ~= "" and debug_global_line_1 or "dbg waiting for product payload..."
         local line2 = debug_global_line_2 ~= "" and debug_global_line_2 or ("dbg now=" .. os.date("%Y-%m-%d %H:%M:%S"))
         local y = NATIVE_HEIGHT - 56
-        test_assets.red:draw(0, NATIVE_HEIGHT - 64, NATIVE_WIDTH, NATIVE_HEIGHT, 0.45)
+        test_assets.red:draw(0, NATIVE_HEIGHT - 64, NATIVE_WIDTH, NATIVE_HEIGHT, 0.65)
         test_assets.font:write(8, y, line1, 22, 1,1,1,1)
         test_assets.font:write(8, y+24, line2, 22, 1,1,1,1)
     end
