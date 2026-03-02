@@ -429,6 +429,7 @@ local function Product(play_state, item)
     local price, old_price
     local artnr, name = '', ''
     local matching_products = {}
+    local debug_line_1, debug_line_2 = "", ""
 
     local function tick(now)
         local now, on_screen, from_start, to_end = play_state.get(now)
@@ -475,8 +476,32 @@ local function Product(play_state, item)
                         ),
                     }
                 end
+
+                local updated_ts = tonumber(product.debug_updated_at)
+                local updated_str = updated_ts and os.date("%Y-%m-%d %H:%M:%S", updated_ts) or "n/a"
+                debug_line_1 = string.format(
+                    "dbg mode=%s slot=%s id=%s variant=%s",
+                    tostring(product.debug_mode or "?"),
+                    tostring(product.debug_slot or "?"),
+                    tostring(product.id or "?"),
+                    tostring(product.variant_id or "?")
+                )
+                debug_line_2 = string.format(
+                    "dbg updated=%s matching=%d",
+                    updated_str,
+                    #matching_products
+                )
             end
         elseif product then
+            local function render_debug_overlay()
+                local size = 24
+                local pad_x = 16
+                local y = HEIGHT - 64
+                ny_assets.pi.black:draw(0, HEIGHT - 70, WIDTH, HEIGHT, 0.65)
+                ny_assets.font.regl:write(pad_x, y+2, debug_line_1, size, 1,1,1,1)
+                ny_assets.font.regl:write(pad_x, y+30, debug_line_2, size, 1,1,1,1)
+            end
+
             local function price_box(x, y)
                 if testing() then
                     local foo = (math.floor(sys.now())) % 3
@@ -601,6 +626,7 @@ local function Product(play_state, item)
                 if #matching_products > 0 then
                     matching_box(1920, 1080)
                 end
+                render_debug_overlay()
             else
                 ny_assets.pi.background:draw(0, HEIGHT/2, WIDTH, HEIGHT)
                 helper.img_centered(brand_image, 1780, 200,  500, 380)
@@ -611,6 +637,7 @@ local function Product(play_state, item)
                 if #matching_products > 0 then
                     matching_box(120, 2450)
                 end
+                render_debug_overlay()
             end
         else
             ny_assets.fallback:draw(0, 0, WIDTH, HEIGHT)

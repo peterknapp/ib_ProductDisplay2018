@@ -1,4 +1,4 @@
-import json, os, random, sys
+import json, os, random, sys, time
 from itertools import islice
 from ny_util import http, SlotUpdater, render_short_link_qr_png
 
@@ -626,6 +626,7 @@ class ProductUpdater(SlotUpdater):
 
         return dict(
             id = product_id,
+            variant_id = variant_id,
             brand = brand,
             web_category = web_category,
             customer_group = customer_group,
@@ -641,6 +642,9 @@ class ProductUpdater(SlotUpdater):
                 b = self._safe_color_channel(variant.get('blue', 0)),
             ),
             matching = matching_products,
+            debug_mode = mode,
+            debug_slot = slot_key,
+            debug_updated_at = int(time.time()),
         )
 
 product_updater = ProductUpdater(
