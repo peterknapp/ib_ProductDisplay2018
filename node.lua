@@ -662,6 +662,8 @@ local function Product(play_state, item)
                 end
                 local s = screen.info() or {}
                 local title_line = product_title ~= '' and product_title or ("ID: " .. tostring(product.id or "?"))
+                local draw_img_ok = false
+                local draw_price_ok = false
                 local status_line = string.format(
                     "img=%s price=%s qr=%s m=%d x=%s y=%s w=%s h=%s r=%s WH=%sx%s",
                     tostring(product_image ~= nil),
@@ -679,7 +681,7 @@ local function Product(play_state, item)
                 ny_assets.pi.black:draw(2350, 640, 3450, 725, 0.75)
                 helper.centered_text(ny_assets.font.bold, 2900, 655, title_line, 44, 1,1,1,1)
                 ny_assets.pi.black:draw(2350, 726, 3450, 772, 0.75)
-                helper.centered_text(ny_assets.font.regl, 2900, 735, status_line, 30, 1,1,1,1)
+                helper.centered_text(ny_assets.font.regl, 2900, 735, status_line, 34, 1,1,1,1)
                 if draw_error ~= "" then
                     ny_assets.pi.black:draw(2350, 773, 3450, 819, 0.85)
                     helper.centered_text(ny_assets.font.regl, 2900, 783, draw_error:sub(1, 90), 24, 1,.4,.4,1)
@@ -694,8 +696,11 @@ local function Product(play_state, item)
                 end
                 if product_image then
                     safe_draw("product_image", function()
-                        helper.img_centered(product_image, 1050, 1100, 1650, 1650)
+                        -- force draw in known area for diagnostics
+                        ny_assets.pi.black:draw(225, 275, 1875, 1925, 0.12)
+                        product_image:draw(225, 275, 1875, 1925, 1,1,1,1)
                     end)
+                    draw_img_ok = true
                 end
                 if qrcode_image then
                     safe_draw("qrcode", function()
@@ -705,6 +710,14 @@ local function Product(play_state, item)
                 safe_draw("price_box", function()
                     price_box(0, 1417)
                 end)
+                draw_price_ok = true
+
+                ny_assets.pi.black:draw(2350, 773, 3450, 819, 0.75)
+                helper.centered_text(
+                    ny_assets.font.regl, 2900, 782,
+                    string.format("draw_img=%s draw_price=%s", tostring(draw_img_ok), tostring(draw_price_ok)),
+                    30, 1,1,1,1
+                )
 
                 if #matching_products > 0 then
                     safe_draw("matching_box", function()
@@ -721,6 +734,8 @@ local function Product(play_state, item)
                 end
                 local s = screen.info() or {}
                 local title_line = product_title ~= '' and product_title or ("ID: " .. tostring(product.id or "?"))
+                local draw_img_ok = false
+                local draw_price_ok = false
                 local status_line = string.format(
                     "img=%s price=%s qr=%s m=%d x=%s y=%s w=%s h=%s r=%s WH=%sx%s",
                     tostring(product_image ~= nil),
@@ -738,7 +753,7 @@ local function Product(play_state, item)
                 ny_assets.pi.black:draw(1230, 390, 2330, 475, 0.75)
                 helper.centered_text(ny_assets.font.bold, 1780, 405, title_line, 44, 1,1,1,1)
                 ny_assets.pi.black:draw(1230, 476, 2330, 522, 0.75)
-                helper.centered_text(ny_assets.font.regl, 1780, 485, status_line, 30, 1,1,1,1)
+                helper.centered_text(ny_assets.font.regl, 1780, 485, status_line, 34, 1,1,1,1)
                 if draw_error ~= "" then
                     ny_assets.pi.black:draw(1230, 523, 2330, 569, 0.85)
                     helper.centered_text(ny_assets.font.regl, 1780, 533, draw_error:sub(1, 90), 24, 1,.4,.4,1)
@@ -753,8 +768,10 @@ local function Product(play_state, item)
                 end
                 if product_image then
                     safe_draw("product_image", function()
-                        helper.img_centered(product_image, 1080, 1250, 1900, 1700)
+                        ny_assets.pi.black:draw(130, 400, 2030, 2100, 0.12)
+                        product_image:draw(130, 400, 2030, 2100, 1,1,1,1)
                     end)
+                    draw_img_ok = true
                 end
                 if qrcode_image then
                     safe_draw("qrcode", function()
@@ -764,6 +781,14 @@ local function Product(play_state, item)
                 safe_draw("price_box", function()
                     price_box(0, 1500)
                 end)
+                draw_price_ok = true
+
+                ny_assets.pi.black:draw(1230, 523, 2330, 569, 0.75)
+                helper.centered_text(
+                    ny_assets.font.regl, 1780, 532,
+                    string.format("draw_img=%s draw_price=%s", tostring(draw_img_ok), tostring(draw_price_ok)),
+                    30, 1,1,1,1
+                )
 
                 if #matching_products > 0 then
                     safe_draw("matching_box", function()
