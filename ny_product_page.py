@@ -106,6 +106,37 @@ class ProductUpdater(SlotUpdater):
 
         return ""
 
+    def _extract_product_title(self, product):
+        if not isinstance(product, dict):
+            return ""
+
+        for key in ("product_name", "name", "title", "label"):
+            value = product.get(key)
+            if isinstance(value, basestring) and value.strip():
+                return value.strip()
+
+        descriptions = product.get("descriptions")
+        if isinstance(descriptions, list):
+            preferred = (self._language or "de").strip().upper()
+            for lang in (preferred, "DE", "EN"):
+                for entry in descriptions:
+                    if not isinstance(entry, dict):
+                        continue
+                    if str(entry.get("language", "")).strip().upper() != lang:
+                        continue
+                    text = entry.get("description")
+                    if isinstance(text, basestring) and text.strip():
+                        return text.strip()
+
+            for entry in descriptions:
+                if not isinstance(entry, dict):
+                    continue
+                text = entry.get("description")
+                if isinstance(text, basestring) and text.strip():
+                    return text.strip()
+
+        return ""
+
     def _pick_non_repeating_product(self, products, slot_key):
         if not products:
             raise ValueError("cannot pick from empty product list")
@@ -627,6 +658,7 @@ class ProductUpdater(SlotUpdater):
         return dict(
             id = product_id,
             variant_id = variant_id,
+            product_title = self._extract_product_title(product),
             brand = brand,
             web_category = web_category,
             customer_group = customer_group,

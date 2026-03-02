@@ -428,6 +428,7 @@ local function Product(play_state, item)
     local product_image, brand_image, qrcode_image
     local price, old_price
     local artnr, name = '', ''
+    local product_title = ''
     local matching_products = {}
     local debug_line_1, debug_line_2 = "", ""
 
@@ -466,6 +467,7 @@ local function Product(play_state, item)
                     translation_prefix .. product.web_category:gsub(" ", "_"):lower(),
                     product.web_category
                 )
+                product_title = tostring(product.product_title or "")
 
                 for idx = 1, #product.matching do
                     local matching = product.matching[idx]
@@ -628,6 +630,9 @@ local function Product(play_state, item)
             if content_area.is_landscape() then
                 ny_assets.pi.background:draw(0, 0, 1920, 2160)
                 helper.img_centered(brand_image, 2900, 420,  1000, 500)
+                if product_title ~= '' then
+                    helper.centered_text(ny_assets.font.regl, 2900, 680, product_title, 44, .2,.2,.2,1)
+                end
                 helper.img_centered(product_image, 1050, 1100, 1650, 1650)
                 qrcode_image:draw(40, 40, 320, 320)
                 price_box(0, 1417)
@@ -639,6 +644,9 @@ local function Product(play_state, item)
             else
                 ny_assets.pi.background:draw(0, HEIGHT/2, WIDTH, HEIGHT)
                 helper.img_centered(brand_image, 1780, 200,  500, 380)
+                if product_title ~= '' then
+                    helper.centered_text(ny_assets.font.regl, 1780, 430, product_title, 44, .2,.2,.2,1)
+                end
                 helper.img_centered(product_image, 1080, 1250, 1900, 1700)
                 qrcode_image:draw(40, 40, 320, 320)
                 price_box(0, 1500)
