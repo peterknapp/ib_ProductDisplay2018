@@ -6,6 +6,8 @@ class ProductUpdater(SlotUpdater):
     def before_update(self):
         with file("brands/mapping.json", "rb") as f:
             self._brand_mapping = json.load(f)
+        if not hasattr(self, "_last_random_product_by_slot"):
+            self._last_random_product_by_slot = {}
 
     def _file_bytes(self, path):
         with file(path, "rb") as f:
@@ -103,6 +105,29 @@ class ProductUpdater(SlotUpdater):
                     return value.strip()
 
         return ""
+
+    def _pick_non_repeating_product(self, products, slot_key):
+        if not products:
+            raise ValueError("cannot pick from empty product list")
+        if len(products) == 1:
+            return products[0]
+
+        last_id = self._last_random_product_by_slot.get(slot_key, "")
+        candidates = []
+        for product in products:
+            product_id = self._extract_product_id(product)
+            if product_id and product_id == last_id:
+                continue
+            candidates.append(product)
+
+        if not candidates:
+            candidates = products
+
+        chosen = random.choice(candidates)
+        chosen_id = self._extract_product_id(chosen)
+        if chosen_id:
+            self._last_random_product_by_slot[slot_key] = chosen_id
+        return chosen
 
     def _extract_random_product_ids(self, payload):
         ids = []
@@ -246,7 +271,7 @@ class ProductUpdater(SlotUpdater):
             return "random_product"
         return "random_product"
 
-    def _fetch_random_product(self, brands, slot_settings):
+    def _fetch_random_product(self, brands, slot_settings, slot_key):
         if isinstance(brands, basestring):
             brands = [brands] if brands.strip() else []
         if not isinstance(brands, list):
@@ -350,9 +375,11 @@ class ProductUpdater(SlotUpdater):
 
                         if scored:
                             scored.sort(key=lambda item: item[0], reverse=True)
-                            return scored[0][1]
+                            top_score = scored[0][0]
+                            top_products = [product for score, product in scored if score == top_score]
+                            return self._pick_non_repeating_product(top_products, slot_key)
 
-                        return products[0]
+                        return self._pick_non_repeating_product(products, slot_key)
                     except Exception as err:
                         errors.append("%s %s params=%r: %r" % (url, method, params, err))
 
@@ -434,12 +461,13 @@ class ProductUpdater(SlotUpdater):
 
     def generate_slot(self, c, slot_settings):
         print >>sys.stderr, "SLOT", slot_settings
+        slot_key = slot_settings.get('_slot_uuid', 'default-random-slot')
 
         mode = self._normalize_mode(slot_settings.get('mode', 'random_product'))
         if mode == 'random_product':
             brands = slot_settings.get('brands', [])
             try:
-                random_product = self._fetch_random_product(brands, slot_settings)
+                random_product = self._fetch_random_product(brands, slot_settings, slot_key)
                 random_product_id = self._extract_product_id(random_product)
                 if random_product_id:
                     try:
@@ -466,7 +494,7 @@ class ProductUpdater(SlotUpdater):
                             limit = 20,
                         )
                         if matching:
-                            product = random.choice(matching)
+                            product = self._pick_non_repeating_product(matching, slot_key)
                             # Enrich to stable full payload when possible.
                             product_id = self._extract_product_id(product)
                             if product_id:

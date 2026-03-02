@@ -135,7 +135,9 @@ class SlotUpdater(object):
         slots = {}
         for slot_uuid, slot_settings in self._slots:
             c.set_prefix('%s-%s-' % (self._item_type, slot_uuid))
-            slots[slot_uuid] = self.generate_slot(c, slot_settings)
+            slot_settings_with_meta = dict(slot_settings)
+            slot_settings_with_meta['_slot_uuid'] = slot_uuid
+            slots[slot_uuid] = self.generate_slot(c, slot_settings_with_meta)
 
         if TESTMODE:
             import pprint, sys
