@@ -1,4 +1,4 @@
-import json, os, sys
+import json, os, random, sys
 from itertools import islice
 from ny_util import http, SlotUpdater, render_short_link_qr_png
 
@@ -373,6 +373,34 @@ class ProductUpdater(SlotUpdater):
         r.raise_for_status()
         return self._unwrap_product_payload(r.json())
 
+    def _fetch_matching_products(self, product_id, variant_id, limit=10):
+        product_id = (product_id or "").strip()
+        variant_id = (variant_id or "").strip()
+        if not product_id:
+            return []
+
+        params = {
+            'country': self._country,
+            'id': product_id,
+            'limit': int(limit),
+        }
+        if variant_id:
+            params['variantId'] = variant_id
+
+        r = http.get(
+            url = "https://%s/csp/products/public/product/matchingProducts" % (self._endpoint,),
+            params = params,
+            timeout = 5,
+        )
+        r.raise_for_status()
+
+        payload = r.json()
+        if isinstance(payload, dict):
+            payload = payload.get('result', [])
+        if not isinstance(payload, list):
+            return []
+        return [item for item in payload if isinstance(item, dict)]
+
     def fetch_variant_image_data(self, variant, res='high'):
         image_ref = self._extract_image_ref(variant)
         if image_ref.startswith("http://") or image_ref.startswith("https://"):
@@ -424,10 +452,40 @@ class ProductUpdater(SlotUpdater):
                 variant = self._select_variant(product, "")
             except Exception as err:
                 print >>sys.stderr, "random mode failed: %r" % (err,)
-                # In random mode never fall back to a configured single product,
-                # otherwise the same product gets pinned forever when random fails.
-                product = {'id': 'unknown', 'brand': '', 'variants': [{}]}
-                variant = {}
+                # Fallback randomization strategy when backend random endpoints are broken:
+                # use matching products from a configured seed product_id.
+                seed_product_id = slot_settings.get('product_id', '').strip()
+                seed_variant_id = slot_settings.get('variant_id', '').strip()
+                if seed_product_id:
+                    try:
+                        seed_product = self._fetch_product_by_id(seed_product_id)
+                        seed_variant = self._select_variant(seed_product, seed_variant_id)
+                        matching = self._fetch_matching_products(
+                            seed_product.get('id') or seed_product_id,
+                            seed_variant.get('id') or seed_variant_id,
+                            limit = 20,
+                        )
+                        if matching:
+                            product = random.choice(matching)
+                            # Enrich to stable full payload when possible.
+                            product_id = self._extract_product_id(product)
+                            if product_id:
+                                try:
+                                    product = self._fetch_product_by_id(product_id)
+                                except Exception as err2:
+                                    print >>sys.stderr, "matching enrich failed for %s: %r" % (product_id, err2)
+                            variant = self._select_variant(product, "")
+                        else:
+                            print >>sys.stderr, "random fallback: no matching products, use seed product"
+                            product = seed_product
+                            variant = seed_variant
+                    except Exception as err2:
+                        print >>sys.stderr, "random fallback from seed failed: %r" % (err2,)
+                        product = {'id': 'unknown', 'brand': '', 'variants': [{}]}
+                        variant = {}
+                else:
+                    product = {'id': 'unknown', 'brand': '', 'variants': [{}]}
+                    variant = {}
         else:
             product_id = slot_settings.get('product_id', '').strip()
             if not product_id:
