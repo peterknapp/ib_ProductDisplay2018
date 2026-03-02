@@ -99,19 +99,49 @@ class ProductUpdater(SlotUpdater):
         if not isinstance(images, list):
             raise ValueError("variant images missing")
 
-        for image in images:
-            if not isinstance(image, dict):
-                continue
-
+        def image_ref(image):
             for key_name in ("key", "image_key", "id", "hash", "token"):
                 key = image.get(key_name)
                 if isinstance(key, basestring) and key.strip():
                     return key.strip()
-
             for key_name in ("url", "image_url", "src", "href"):
                 url = image.get(key_name)
                 if isinstance(url, basestring) and url.strip():
                     return url.strip()
+            return None
+
+        def norm(value):
+            if isinstance(value, basestring):
+                return value.strip().upper()
+            return ""
+
+        scored = []
+        for image in images:
+            if not isinstance(image, dict):
+                continue
+            ref = image_ref(image)
+            if not ref:
+                continue
+
+            img_type = norm(image.get("type"))
+            img_angle = norm(image.get("angle"))
+            has_thumb = bool(image.get("has_thumbnail", False))
+
+            score = 0
+            if has_thumb:
+                score += 1
+            if img_angle == "FRONT":
+                score += 2
+            if img_type in ("CUTOUT", "MODEL", "PACKSHOT"):
+                score += 2
+            if "LOGO" in img_type or "LOGO" in ref.upper():
+                score -= 5
+
+            scored.append((score, ref))
+
+        if scored:
+            scored.sort(key=lambda item: item[0], reverse=True)
+            return scored[0][1]
 
         raise ValueError("no usable image reference in variant")
 
@@ -157,7 +187,8 @@ class ProductUpdater(SlotUpdater):
 
         params = {
             'country': self._country,
-            'limit': 1,
+            # Ask for multiple candidates so we can choose a displayable one.
+            'limit': 10,
         }
         if brands:
             print >>sys.stderr, 'brand filter active: %r' % (brands,)
@@ -185,6 +216,30 @@ class ProductUpdater(SlotUpdater):
                 if not products:
                     errors.append("empty product list from %s" % (url,))
                     continue
+
+                # Prefer products with non-coming-soon variants and usable images.
+                scored = []
+                for product in products:
+                    try:
+                        variant = self._select_variant(product, "")
+                    except Exception:
+                        continue
+
+                    images = variant.get("images")
+                    has_images = isinstance(images, list) and len(images) > 0
+                    coming_soon = bool(variant.get("coming_soon", False))
+
+                    score = 0
+                    if has_images:
+                        score += 2
+                    if not coming_soon:
+                        score += 1
+                    scored.append((score, product))
+
+                if scored:
+                    scored.sort(key=lambda item: item[0], reverse=True)
+                    return scored[0][1]
+
                 return products[0]
             except Exception as err:
                 errors.append("%s: %r" % (url, err))
@@ -202,7 +257,13 @@ class ProductUpdater(SlotUpdater):
             return r.content
 
         last_error = None
-        for params in ({'res': res}, {}):
+        for params in (
+            {'res': 'full-hd', 'frame': '2_3'},
+            {'res': 'full-hd'},
+            {'res': res},
+            {'frame': '2_3'},
+            {},
+        ):
             try:
                 r = http.get(
                     url = "https://%s/csp/images/image/public/%s" % (self._endpoint, image_ref),
