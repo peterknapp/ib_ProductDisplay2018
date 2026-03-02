@@ -496,7 +496,7 @@ local function Product(play_state, item)
             end
         elseif product then
             local function render_debug_overlay()
-                if not debug_overlay_enabled then
+                if not (debug_overlay_enabled or debug_overlay_force) then
                     return
                 end
                 local size = 24
@@ -504,6 +504,8 @@ local function Product(play_state, item)
                 local y = HEIGHT - 116
                 local line1 = debug_line_1 ~= "" and debug_line_1 or "dbg waiting for product payload..."
                 local line2 = debug_line_2 ~= "" and debug_line_2 or ("dbg now=" .. os.date("%Y-%m-%d %H:%M:%S"))
+                ny_assets.pi.black:draw(0, 0, 140, 36, 1, 0, 0, 0.85)
+                ny_assets.font.regl:write(8, 8, "PDBG", 20, 1,1,1,1)
                 ny_assets.pi.black:draw(0, HEIGHT - 130, WIDTH, HEIGHT, 0.72)
                 ny_assets.font.regl:write(pad_x, y+6, line1, size, 1,1,1,1)
                 ny_assets.font.regl:write(pad_x, y+40, line2, size, 1,1,1,1)
