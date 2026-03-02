@@ -663,14 +663,18 @@ local function Product(play_state, item)
                 local s = screen.info() or {}
                 local title_line = product_title ~= '' and product_title or ("ID: " .. tostring(product.id or "?"))
                 local status_line = string.format(
-                    "img=%s price=%s qr=%s m=%d x=%s y=%s r=%s",
+                    "img=%s price=%s qr=%s m=%d x=%s y=%s w=%s h=%s r=%s WH=%sx%s",
                     tostring(product_image ~= nil),
                     tostring(price ~= nil and price ~= false),
                     tostring(qrcode_image ~= nil),
                     #matching_products,
                     tostring(s.x or "?"),
                     tostring(s.y or "?"),
-                    tostring(s.rotation or "?")
+                    tostring(s.w or "?"),
+                    tostring(s.h or "?"),
+                    tostring(s.rotation or "?"),
+                    tostring(WIDTH or "?"),
+                    tostring(HEIGHT or "?")
                 )
                 ny_assets.pi.black:draw(2350, 640, 3450, 725, 0.75)
                 helper.centered_text(ny_assets.font.bold, 2900, 655, title_line, 44, 1,1,1,1)
@@ -718,14 +722,18 @@ local function Product(play_state, item)
                 local s = screen.info() or {}
                 local title_line = product_title ~= '' and product_title or ("ID: " .. tostring(product.id or "?"))
                 local status_line = string.format(
-                    "img=%s price=%s qr=%s m=%d x=%s y=%s r=%s",
+                    "img=%s price=%s qr=%s m=%d x=%s y=%s w=%s h=%s r=%s WH=%sx%s",
                     tostring(product_image ~= nil),
                     tostring(price ~= nil and price ~= false),
                     tostring(qrcode_image ~= nil),
                     #matching_products,
                     tostring(s.x or "?"),
                     tostring(s.y or "?"),
-                    tostring(s.rotation or "?")
+                    tostring(s.w or "?"),
+                    tostring(s.h or "?"),
+                    tostring(s.rotation or "?"),
+                    tostring(WIDTH or "?"),
+                    tostring(HEIGHT or "?")
                 )
                 ny_assets.pi.black:draw(1230, 390, 2330, 475, 0.75)
                 helper.centered_text(ny_assets.font.bold, 1780, 405, title_line, 44, 1,1,1,1)
