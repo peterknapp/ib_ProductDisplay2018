@@ -320,27 +320,6 @@ Vue.component('global-settings', {
     country: config_value('country', 'de'),
     language: config_value('language', 'de'),
     debug_overlay: config_value('debug_overlay', false),
-    product_refresh_seconds: {
-      get() {
-        var value = this.$store.state.config.product_refresh_seconds;
-        if (value == undefined)
-          value = 30;
-        return value;
-      },
-      set(v) {
-        var parsed = parseInt(v, 10);
-        if (isNaN(parsed))
-          parsed = 30;
-        if (parsed < 5)
-          parsed = 5;
-        if (parsed > 300)
-          parsed = 300;
-        this.$store.commit('set_value', {
-          key: 'product_refresh_seconds',
-          value: parsed,
-        })
-      }
-    },
 
     endpoint_values: values_from_nodejson('endpoint'),
     country_values: values_from_nodejson('country'),

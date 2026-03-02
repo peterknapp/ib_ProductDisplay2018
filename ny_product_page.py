@@ -11,15 +11,30 @@ class ProductUpdater(SlotUpdater):
         if not hasattr(self, "_rotation_index_by_slot"):
             self._rotation_index_by_slot = {}
 
-        # Allow predictable product rotation cadence via setup option.
+        # Match update cadence to product playlist duration(s).
         try:
             with file("config.json", "rb") as f:
                 config = json.load(f)
-            refresh_seconds = int(config.get("product_refresh_seconds", 30))
-            self._refresh_interval = max(5, min(300, refresh_seconds))
+            product_durations = []
+            for item in config.get("playlist", []):
+                if item.get("type") != "product":
+                    continue
+                try:
+                    duration = float(item.get("duration", 10))
+                except Exception:
+                    duration = 10.0
+                if duration > 0:
+                    product_durations.append(duration)
+
+            if product_durations:
+                # For multiple product slots we update at least as frequently
+                # as the shortest configured product duration.
+                self._refresh_interval = max(1, min(product_durations))
+            else:
+                self._refresh_interval = 10
         except Exception as err:
-            print >>sys.stderr, "failed to parse product_refresh_seconds: %r" % (err,)
-            self._refresh_interval = 30
+            print >>sys.stderr, "failed to derive product refresh from playlist durations: %r" % (err,)
+            self._refresh_interval = 10
 
     def _file_bytes(self, path):
         with file(path, "rb") as f:
