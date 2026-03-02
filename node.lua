@@ -494,12 +494,17 @@ local function Product(play_state, item)
             end
         elseif product then
             local function render_debug_overlay()
+                if not debug_overlay_enabled then
+                    return
+                end
                 local size = 24
                 local pad_x = 16
-                local y = HEIGHT - 64
-                ny_assets.pi.black:draw(0, HEIGHT - 70, WIDTH, HEIGHT, 0.65)
-                ny_assets.font.regl:write(pad_x, y+2, debug_line_1, size, 1,1,1,1)
-                ny_assets.font.regl:write(pad_x, y+30, debug_line_2, size, 1,1,1,1)
+                local y = HEIGHT - 116
+                local line1 = debug_line_1 ~= "" and debug_line_1 or "dbg waiting for product payload..."
+                local line2 = debug_line_2 ~= "" and debug_line_2 or ("dbg now=" .. os.date("%Y-%m-%d %H:%M:%S"))
+                ny_assets.pi.black:draw(0, HEIGHT - 130, WIDTH, HEIGHT, 0.72)
+                ny_assets.font.regl:write(pad_x, y+6, line1, size, 1,1,1,1)
+                ny_assets.font.regl:write(pad_x, y+40, line2, size, 1,1,1,1)
             end
 
             local function price_box(x, y)
@@ -918,10 +923,12 @@ local function Playlist()
     }
 end
 local playlist = Playlist()
+local debug_overlay_enabled = false
 
 
 util.json_watch("config.json", function(config)
     playlist.update(config.playlist)
+    debug_overlay_enabled = config.debug_overlay == true
 end)
 
 util.json_watch("screen/config.json", function(config)

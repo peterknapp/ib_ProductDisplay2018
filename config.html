@@ -196,6 +196,13 @@
               <option v-for="kv in endpoint_values" :value='kv.k'>{{kv.v}}</option>
             </select>
           </p>
+
+          <p>
+            <label>
+              <input type='checkbox' v-model='debug_overlay'>
+              Debug overlay on screen
+            </label>
+          </p>
         </div>
       </div>
     </script>

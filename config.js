@@ -319,6 +319,7 @@ Vue.component('global-settings', {
     endpoint: config_value('endpoint', 'api.newyorker.de'),
     country: config_value('country', 'de'),
     language: config_value('language', 'de'),
+    debug_overlay: config_value('debug_overlay', false),
 
     endpoint_values: values_from_nodejson('endpoint'),
     country_values: values_from_nodejson('country'),
