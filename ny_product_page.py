@@ -10,21 +10,32 @@ class ProductUpdater(SlotUpdater):
             self._last_random_product_by_slot = {}
         if not hasattr(self, "_rotation_index_by_slot"):
             self._rotation_index_by_slot = {}
+        if not hasattr(self, "_cached_random_product_by_slot"):
+            self._cached_random_product_by_slot = {}
+        if not hasattr(self, "_next_rotation_at_by_slot"):
+            self._next_rotation_at_by_slot = {}
+        if not hasattr(self, "_slot_duration_seconds_by_slot"):
+            self._slot_duration_seconds_by_slot = {}
 
         # Match update cadence to product playlist duration(s).
         try:
             with file("config.json", "rb") as f:
                 config = json.load(f)
             product_durations = []
-            for item in config.get("playlist", []):
+            slot_durations = {}
+            for item_idx, item in enumerate(config.get("playlist", [])):
                 if item.get("type") != "product":
                     continue
+                slot_uuid = item.get("uuid", "").strip()
+                if not slot_uuid:
+                    slot_uuid = "slot-%d" % (item_idx+1)
                 try:
                     duration = float(item.get("duration", 10))
                 except Exception:
                     duration = 10.0
                 if duration > 0:
                     product_durations.append(duration)
+                    slot_durations[slot_uuid] = duration
 
             if product_durations:
                 # For multiple product slots we update at least as frequently
@@ -32,9 +43,28 @@ class ProductUpdater(SlotUpdater):
                 self._refresh_interval = max(1, min(product_durations))
             else:
                 self._refresh_interval = 10
+            self._slot_duration_seconds_by_slot = slot_durations
+            print >>sys.stderr, "product updater cadence refresh=%.1fs slot_durations=%r" % (
+                self._refresh_interval, self._slot_duration_seconds_by_slot
+            )
         except Exception as err:
             print >>sys.stderr, "failed to derive product refresh from playlist durations: %r" % (err,)
             self._refresh_interval = 10
+
+    def _get_slot_duration_seconds(self, slot_key):
+        try:
+            duration = float(self._slot_duration_seconds_by_slot.get(slot_key, 10.0))
+        except Exception:
+            duration = 10.0
+        return max(1.0, duration)
+
+    def _is_slot_rotation_due(self, slot_key):
+        now = time.time()
+        return now >= float(self._next_rotation_at_by_slot.get(slot_key, 0))
+
+    def _cache_slot_product_until_next_rotation(self, slot_key, product):
+        self._cached_random_product_by_slot[slot_key] = product
+        self._next_rotation_at_by_slot[slot_key] = time.time() + self._get_slot_duration_seconds(slot_key)
 
     def _file_bytes(self, path):
         with file(path, "rb") as f:
@@ -526,19 +556,27 @@ class ProductUpdater(SlotUpdater):
 
         mode = self._normalize_mode(slot_settings.get('mode', 'random_product'))
         if mode == 'random_product':
-            brands = slot_settings.get('brands', [])
             try:
-                random_product = self._fetch_random_product(brands, slot_settings, slot_key)
-                random_product_id = self._extract_product_id(random_product)
-                if random_product_id:
-                    try:
-                        product = self._fetch_product_by_id(random_product_id)
-                    except Exception as err:
-                        print >>sys.stderr, "failed to enrich random product %s: %r" % (random_product_id, err)
-                        product = random_product
+                if (not self._is_slot_rotation_due(slot_key) and
+                        slot_key in self._cached_random_product_by_slot):
+                    print >>sys.stderr, "slot %s keep cached random product (duration not elapsed)" % (slot_key,)
+                    product = self._cached_random_product_by_slot[slot_key]
+                    variant = self._select_variant(product, "")
                 else:
-                    product = random_product
-                variant = self._select_variant(product, "")
+                    print >>sys.stderr, "slot %s rotate random product (duration elapsed)" % (slot_key,)
+                    brands = slot_settings.get('brands', [])
+                    random_product = self._fetch_random_product(brands, slot_settings, slot_key)
+                    random_product_id = self._extract_product_id(random_product)
+                    if random_product_id:
+                        try:
+                            product = self._fetch_product_by_id(random_product_id)
+                        except Exception as err:
+                            print >>sys.stderr, "failed to enrich random product %s: %r" % (random_product_id, err)
+                            product = random_product
+                    else:
+                        product = random_product
+                    variant = self._select_variant(product, "")
+                    self._cache_slot_product_until_next_rotation(slot_key, product)
             except Exception as err:
                 print >>sys.stderr, "random mode failed: %r" % (err,)
                 # Fallback randomization strategy when backend random endpoints are broken:
@@ -564,10 +602,12 @@ class ProductUpdater(SlotUpdater):
                                 except Exception as err2:
                                     print >>sys.stderr, "matching enrich failed for %s: %r" % (product_id, err2)
                             variant = self._select_variant(product, "")
+                            self._cache_slot_product_until_next_rotation(slot_key, product)
                         else:
                             print >>sys.stderr, "random fallback: no matching products, use seed product"
                             product = seed_product
                             variant = seed_variant
+                            self._cache_slot_product_until_next_rotation(slot_key, product)
                     except Exception as err2:
                         print >>sys.stderr, "random fallback from seed failed: %r" % (err2,)
                         product = {'id': 'unknown', 'brand': '', 'variants': [{}]}
