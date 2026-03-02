@@ -433,28 +433,7 @@ local function Product(play_state, item)
     local product_image, brand_image, qrcode_image
     local price, old_price
     local artnr, name = '', ''
-    local product_title = ''
     local matching_products = {}
-    local debug_line_1, debug_line_2 = "", ""
-    local draw_error = ""
-    local function safe_load_image(loader, name)
-        local ok, img = pcall(loader, name)
-        if ok then
-            return img
-        end
-        print("safe_load_image failed", name, img)
-        return nil
-    end
-
-    local function safe_draw(label, fn)
-        local ok, err = pcall(fn)
-        if not ok then
-            draw_error = tostring(label) .. ":" .. tostring(err)
-            print("safe_draw failed", label, err)
-            return false
-        end
-        return true
-    end
 
     local function tick(now)
         local now, on_screen, from_start, to_end = play_state.get(now)
@@ -467,9 +446,9 @@ local function Product(play_state, item)
                     return
                 end
 
-                product_image = safe_load_image(product_assets.load_image, product.img_product)
-                brand_image = safe_load_image(product_assets.load_image, product.img_brand)
-                qrcode_image = safe_load_image(product_assets.load_image, product.img_qrcode)
+                product_image = product_assets.load_image(product.img_product)
+                brand_image = product_assets.load_image(product.img_brand)
+                qrcode_image = product_assets.load_image(product.img_qrcode)
 
                 if product.current_price then
                     price = helper.format_price(product.currency, product.current_price)
@@ -491,52 +470,25 @@ local function Product(play_state, item)
                     translation_prefix .. product.web_category:gsub(" ", "_"):lower(),
                     product.web_category
                 )
-                product_title = tostring(product.product_title or "")
+                debug_global_line_1 = string.format(
+                    "product id=%s variant=%s mode=%s",
+                    tostring(product.id or "?"),
+                    tostring(product.variant_id or "?"),
+                    tostring(product.debug_mode or "?")
+                )
+                debug_global_line_2 = "updated " .. os.date("%Y-%m-%d %H:%M:%S")
 
                 for idx = 1, #product.matching do
                     local matching = product.matching[idx]
                     matching_products[#matching_products+1] = {
-                        image = safe_load_image(product_assets.load_image, matching.img_product),
+                        image = product_assets.load_image(matching.img_product),
                         price = matching.current_price and helper.format_price_no_currency(
                             product.currency, matching.current_price
                         ),
                     }
                 end
-
-                local updated_ts = tonumber(product.debug_updated_at)
-                local updated_str = updated_ts and os.date("%Y-%m-%d %H:%M:%S", updated_ts) or "n/a"
-                debug_line_1 = string.format(
-                    "dbg mode=%s slot=%s id=%s variant=%s",
-                    tostring(product.debug_mode or "?"),
-                    tostring(product.debug_slot or "?"),
-                    tostring(product.id or "?"),
-                    tostring(product.variant_id or "?")
-                )
-                debug_line_2 = string.format(
-                    "dbg updated=%s matching=%d",
-                    updated_str,
-                    #matching_products
-                )
-                debug_global_line_1 = debug_line_1
-                debug_global_line_2 = debug_line_2
             end
         elseif product then
-            local function render_debug_overlay()
-                if not (debug_overlay_enabled or debug_overlay_force) then
-                    return
-                end
-                local size = 24
-                local pad_x = 16
-                local y = HEIGHT - 116
-                local line1 = debug_line_1 ~= "" and debug_line_1 or "dbg waiting for product payload..."
-                local line2 = debug_line_2 ~= "" and debug_line_2 or ("dbg now=" .. os.date("%Y-%m-%d %H:%M:%S"))
-                ny_assets.pi.black:draw(0, 0, 140, 36, 1, 0, 0, 0.85)
-                ny_assets.font.regl:write(8, 8, "PDBG", 20, 1,1,1,1)
-                ny_assets.pi.black:draw(0, HEIGHT - 130, WIDTH, HEIGHT, 0.72)
-                ny_assets.font.regl:write(pad_x, y+6, line1, size, 1,1,1,1)
-                ny_assets.font.regl:write(pad_x, y+40, line2, size, 1,1,1,1)
-            end
-
             local function price_box(x, y)
                 if testing() then
                     local foo = (math.floor(sys.now())) % 3
@@ -623,12 +575,10 @@ local function Product(play_state, item)
                 for idx = 1, #matching_products do
                     local matching_product = matching_products[idx]
                     ny_assets.pi.gradient:draw(px+margin/2, py, px+margin/2+product_w, py+product_h)
-                    if matching_product.image then
-                        util.draw_correct(matching_product.image, 
-                            px+margin/2+img_padding, py+img_padding,
-                            px+margin/2+product_w-img_padding, py+product_h-img_padding
-                        )
-                    end
+                    util.draw_correct(matching_product.image, 
+                        px+margin/2+img_padding, py+img_padding,
+                        px+margin/2+product_w-img_padding, py+product_h-img_padding
+                    )
 
                     if matching_product.price then
                         local font = ny_assets.font.bold
@@ -655,147 +605,24 @@ local function Product(play_state, item)
 
             if content_area.is_landscape() then
                 ny_assets.pi.background:draw(0, 0, 1920, 2160)
-                if brand_image then
-                    safe_draw("brand_image", function()
-                        helper.img_centered(brand_image, 2900, 420,  1000, 500)
-                    end)
-                end
-                local s = screen.info() or {}
-                local title_line = product_title ~= '' and product_title or ("ID: " .. tostring(product.id or "?"))
-                local draw_img_ok = false
-                local draw_price_ok = false
-                local status_line = string.format(
-                    "img=%s price=%s qr=%s m=%d x=%s y=%s w=%s h=%s r=%s WH=%sx%s",
-                    tostring(product_image ~= nil),
-                    tostring(price ~= nil and price ~= false),
-                    tostring(qrcode_image ~= nil),
-                    #matching_products,
-                    tostring(s.x or "?"),
-                    tostring(s.y or "?"),
-                    tostring(s.w or "?"),
-                    tostring(s.h or "?"),
-                    tostring(s.rotation or "?"),
-                    tostring(WIDTH or "?"),
-                    tostring(HEIGHT or "?")
-                )
-                ny_assets.pi.black:draw(2350, 640, 3450, 725, 0.75)
-                helper.centered_text(ny_assets.font.bold, 2900, 655, title_line, 44, 1,1,1,1)
-                ny_assets.pi.black:draw(2350, 726, 3450, 772, 0.75)
-                helper.centered_text(ny_assets.font.regl, 2900, 735, status_line, 34, 1,1,1,1)
-                if draw_error ~= "" then
-                    ny_assets.pi.black:draw(2350, 773, 3450, 819, 0.85)
-                    helper.centered_text(ny_assets.font.regl, 2900, 783, draw_error:sub(1, 90), 24, 1,.4,.4,1)
-                end
-                if debug_overlay_enabled or debug_overlay_force then
-                    local d1 = debug_line_1 ~= "" and debug_line_1 or "dbg waiting for product payload..."
-                    local d2 = debug_line_2 ~= "" and debug_line_2 or ("dbg now=" .. os.date("%Y-%m-%d %H:%M:%S"))
-                    ny_assets.pi.black:draw(2350, 820, 3450, 870, 0.78)
-                    ny_assets.pi.black:draw(2350, 875, 3450, 925, 0.78)
-                    ny_assets.font.regl:write(2360, 829, d1, 26, 1,1,1,1)
-                    ny_assets.font.regl:write(2360, 884, d2, 26, 1,1,1,1)
-                end
-                if product_image then
-                    safe_draw("product_image", function()
-                        -- force draw in known area for diagnostics
-                        ny_assets.pi.black:draw(225, 275, 1875, 1925, 0.12)
-                        product_image:draw(225, 275, 1875, 1925, 1,1,1,1)
-                    end)
-                    draw_img_ok = true
-                end
-                if qrcode_image then
-                    safe_draw("qrcode", function()
-                        qrcode_image:draw(40, 40, 320, 320)
-                    end)
-                end
-                safe_draw("price_box", function()
-                    price_box(0, 1417)
-                end)
-                draw_price_ok = true
-
-                ny_assets.pi.black:draw(2350, 773, 3450, 819, 0.75)
-                helper.centered_text(
-                    ny_assets.font.regl, 2900, 782,
-                    string.format("draw_img=%s draw_price=%s", tostring(draw_img_ok), tostring(draw_price_ok)),
-                    30, 1,1,1,1
-                )
+                helper.img_centered(brand_image, 2900, 420,  1000, 500)
+                helper.img_centered(product_image, 1050, 1100, 1650, 1650)
+                qrcode_image:draw(40, 40, 320, 320)
+                price_box(0, 1417)
 
                 if #matching_products > 0 then
-                    safe_draw("matching_box", function()
-                        matching_box(1920, 1080)
-                    end)
+                    matching_box(1920, 1080)
                 end
-                render_debug_overlay()
             else
                 ny_assets.pi.background:draw(0, HEIGHT/2, WIDTH, HEIGHT)
-                if brand_image then
-                    safe_draw("brand_image", function()
-                        helper.img_centered(brand_image, 1780, 200,  500, 380)
-                    end)
-                end
-                local s = screen.info() or {}
-                local title_line = product_title ~= '' and product_title or ("ID: " .. tostring(product.id or "?"))
-                local draw_img_ok = false
-                local draw_price_ok = false
-                local status_line = string.format(
-                    "img=%s price=%s qr=%s m=%d x=%s y=%s w=%s h=%s r=%s WH=%sx%s",
-                    tostring(product_image ~= nil),
-                    tostring(price ~= nil and price ~= false),
-                    tostring(qrcode_image ~= nil),
-                    #matching_products,
-                    tostring(s.x or "?"),
-                    tostring(s.y or "?"),
-                    tostring(s.w or "?"),
-                    tostring(s.h or "?"),
-                    tostring(s.rotation or "?"),
-                    tostring(WIDTH or "?"),
-                    tostring(HEIGHT or "?")
-                )
-                ny_assets.pi.black:draw(1230, 390, 2330, 475, 0.75)
-                helper.centered_text(ny_assets.font.bold, 1780, 405, title_line, 44, 1,1,1,1)
-                ny_assets.pi.black:draw(1230, 476, 2330, 522, 0.75)
-                helper.centered_text(ny_assets.font.regl, 1780, 485, status_line, 34, 1,1,1,1)
-                if draw_error ~= "" then
-                    ny_assets.pi.black:draw(1230, 523, 2330, 569, 0.85)
-                    helper.centered_text(ny_assets.font.regl, 1780, 533, draw_error:sub(1, 90), 24, 1,.4,.4,1)
-                end
-                if debug_overlay_enabled or debug_overlay_force then
-                    local d1 = debug_line_1 ~= "" and debug_line_1 or "dbg waiting for product payload..."
-                    local d2 = debug_line_2 ~= "" and debug_line_2 or ("dbg now=" .. os.date("%Y-%m-%d %H:%M:%S"))
-                    ny_assets.pi.black:draw(1230, 570, 2330, 620, 0.78)
-                    ny_assets.pi.black:draw(1230, 625, 2330, 675, 0.78)
-                    ny_assets.font.regl:write(1240, 579, d1, 26, 1,1,1,1)
-                    ny_assets.font.regl:write(1240, 634, d2, 26, 1,1,1,1)
-                end
-                if product_image then
-                    safe_draw("product_image", function()
-                        ny_assets.pi.black:draw(130, 400, 2030, 2100, 0.12)
-                        product_image:draw(130, 400, 2030, 2100, 1,1,1,1)
-                    end)
-                    draw_img_ok = true
-                end
-                if qrcode_image then
-                    safe_draw("qrcode", function()
-                        qrcode_image:draw(40, 40, 320, 320)
-                    end)
-                end
-                safe_draw("price_box", function()
-                    price_box(0, 1500)
-                end)
-                draw_price_ok = true
-
-                ny_assets.pi.black:draw(1230, 523, 2330, 569, 0.75)
-                helper.centered_text(
-                    ny_assets.font.regl, 1780, 532,
-                    string.format("draw_img=%s draw_price=%s", tostring(draw_img_ok), tostring(draw_price_ok)),
-                    30, 1,1,1,1
-                )
+                helper.img_centered(brand_image, 1780, 200,  500, 380)
+                helper.img_centered(product_image, 1080, 1250, 1900, 1700)
+                qrcode_image:draw(40, 40, 320, 320)
+                price_box(0, 1500)
 
                 if #matching_products > 0 then
-                    safe_draw("matching_box", function()
-                        matching_box(120, 2450)
-                    end)
+                    matching_box(120, 2450)
                 end
-                render_debug_overlay()
             end
         else
             ny_assets.fallback:draw(0, 0, WIDTH, HEIGHT)
@@ -1080,7 +907,6 @@ local debug_overlay_enabled = false
 local debug_overlay_root = false
 local debug_global_line_1 = ""
 local debug_global_line_2 = ""
-local debug_overlay_force = true
 
 local function is_enabled(value)
     if value == true then
@@ -1207,30 +1033,14 @@ function node.render()
     screen.setup()
     playlist.play(time.get())
 
-    if debug_overlay_enabled or debug_overlay_force then
+    if debug_overlay_enabled then
         gl.ortho()
-        test_assets.red:draw(0, 0, 260, 40, 0.85)
-        test_assets.font:write(8, 10, "DBG FORCE ON", 20, 1,1,1,1)
-
-        local line1 = debug_global_line_1 ~= "" and debug_global_line_1 or "dbg waiting for product payload..."
-        local line2 = debug_global_line_2 ~= "" and debug_global_line_2 or ("dbg now=" .. os.date("%Y-%m-%d %H:%M:%S"))
-        local s = screen.info() or {}
-        local ca_w, ca_h = content_area.size()
-        local line3 = string.format(
-            "view x=%s y=%s w=%s h=%s rot=%s orient=%s area=%dx%d",
-            tostring(s.x or "?"),
-            tostring(s.y or "?"),
-            tostring(s.w or "?"),
-            tostring(s.h or "?"),
-            tostring(s.rotation or "?"),
-            content_area.is_landscape() and "landscape" or "portrait",
-            ca_w, ca_h
-        )
-        local y = NATIVE_HEIGHT - 84
-        test_assets.red:draw(0, NATIVE_HEIGHT - 94, NATIVE_WIDTH, NATIVE_HEIGHT, 0.65)
-        test_assets.font:write(8, y, line1, 22, 1,1,1,1)
-        test_assets.font:write(8, y+24, line2, 22, 1,1,1,1)
-        test_assets.font:write(8, y+48, line3, 22, 1,1,1,1)
+        local line1 = debug_global_line_1 ~= "" and debug_global_line_1 or "dbg active (waiting for product)"
+        local line2 = debug_global_line_2 ~= "" and debug_global_line_2 or ("time=" .. os.date("%Y-%m-%d %H:%M:%S"))
+        local y = NATIVE_HEIGHT - 58
+        test_assets.red:draw(0, NATIVE_HEIGHT - 66, NATIVE_WIDTH, NATIVE_HEIGHT, 0.35)
+        test_assets.font:write(8, y, line1, 20, 1,1,1,1)
+        test_assets.font:write(8, y+22, line2, 20, 1,1,1,1)
     end
 
     if testing() then
