@@ -633,6 +633,14 @@ local function Product(play_state, item)
                 local title_line = product_title ~= '' and product_title or ("ID: " .. tostring(product.id or "?"))
                 ny_assets.pi.black:draw(2350, 640, 3450, 725, 0.75)
                 helper.centered_text(ny_assets.font.bold, 2900, 655, title_line, 44, 1,1,1,1)
+                if debug_overlay_enabled or debug_overlay_force then
+                    local d1 = debug_line_1 ~= "" and debug_line_1 or "dbg waiting for product payload..."
+                    local d2 = debug_line_2 ~= "" and debug_line_2 or ("dbg now=" .. os.date("%Y-%m-%d %H:%M:%S"))
+                    ny_assets.pi.black:draw(2350, 735, 3450, 785, 0.78)
+                    ny_assets.pi.black:draw(2350, 790, 3450, 840, 0.78)
+                    ny_assets.font.regl:write(2360, 744, d1, 26, 1,1,1,1)
+                    ny_assets.font.regl:write(2360, 799, d2, 26, 1,1,1,1)
+                end
                 helper.img_centered(product_image, 1050, 1100, 1650, 1650)
                 qrcode_image:draw(40, 40, 320, 320)
                 price_box(0, 1417)
@@ -647,6 +655,14 @@ local function Product(play_state, item)
                 local title_line = product_title ~= '' and product_title or ("ID: " .. tostring(product.id or "?"))
                 ny_assets.pi.black:draw(1230, 390, 2330, 475, 0.75)
                 helper.centered_text(ny_assets.font.bold, 1780, 405, title_line, 44, 1,1,1,1)
+                if debug_overlay_enabled or debug_overlay_force then
+                    local d1 = debug_line_1 ~= "" and debug_line_1 or "dbg waiting for product payload..."
+                    local d2 = debug_line_2 ~= "" and debug_line_2 or ("dbg now=" .. os.date("%Y-%m-%d %H:%M:%S"))
+                    ny_assets.pi.black:draw(1230, 485, 2330, 535, 0.78)
+                    ny_assets.pi.black:draw(1230, 540, 2330, 590, 0.78)
+                    ny_assets.font.regl:write(1240, 494, d1, 26, 1,1,1,1)
+                    ny_assets.font.regl:write(1240, 549, d2, 26, 1,1,1,1)
+                end
                 helper.img_centered(product_image, 1080, 1250, 1900, 1700)
                 qrcode_image:draw(40, 40, 320, 320)
                 price_box(0, 1500)
