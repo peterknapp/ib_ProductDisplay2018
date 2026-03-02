@@ -927,6 +927,20 @@ local debug_overlay_enabled = false
 local debug_overlay_root = false
 local debug_overlay_screen = false
 
+local function is_enabled(value)
+    if value == true then
+        return true
+    end
+    if type(value) == "number" then
+        return value ~= 0
+    end
+    if type(value) == "string" then
+        local lower = value:lower()
+        return lower == "true" or lower == "1" or lower == "yes" or lower == "on"
+    end
+    return false
+end
+
 local function update_debug_overlay_state()
     debug_overlay_enabled = debug_overlay_root or debug_overlay_screen
 end
@@ -934,12 +948,12 @@ end
 
 util.json_watch("config.json", function(config)
     playlist.update(config.playlist)
-    debug_overlay_root = config.debug_overlay == true
+    debug_overlay_root = is_enabled(config.debug_overlay)
     update_debug_overlay_state()
 end)
 
 util.json_watch("screen/config.json", function(config)
-    debug_overlay_screen = config.debug_overlay == true
+    debug_overlay_screen = is_enabled(config.debug_overlay)
     update_debug_overlay_state()
     content_area.update(config.orientation == "landscape")
 
@@ -1039,6 +1053,12 @@ local test_assets = {
 function node.render()
     screen.setup()
     playlist.play(time.get())
+
+    if debug_overlay_enabled then
+        gl.ortho()
+        test_assets.red:draw(0, 0, 120, 34, 0.75)
+        test_assets.font:write(8, 8, "DBG ON", 18, 1,1,1,1)
+    end
 
     if testing() then
         gl.ortho()
