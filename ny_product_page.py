@@ -252,14 +252,11 @@ class ProductUpdater(SlotUpdater):
         if not isinstance(brands, list):
             brands = []
 
-        params = {
+        base_params = {
             'country': self._country,
             # Ask for multiple candidates so we can choose a displayable one.
             'limit': 10,
         }
-        if brands:
-            print >>sys.stderr, 'brand filter active: %r' % (brands,)
-            params['brand'] = ','.join(brands)
 
         endpoints = [
             "https://%s/csp/products/public/products/randomCollectionProducts" % (self._endpoint,),
@@ -271,56 +268,65 @@ class ProductUpdater(SlotUpdater):
         ]
 
         errors = []
-        for url in endpoints:
-            try:
-                r = http.get(
-                    url = url,
-                    params = params,
-                    timeout = 5
-                )
-                r.raise_for_status()
-                payload = r.json()
-                products = self._extract_products_from_payload(payload)
-                if not products:
-                    product_ids = self._extract_random_product_ids(payload)
-                    if product_ids:
-                        return {'id': product_ids[0]}
-                    errors.append("empty product list from %s" % (url,))
-                    continue
+        param_variants = []
+        if brands:
+            print >>sys.stderr, 'brand filter active: %r' % (brands,)
+            with_brand = dict(base_params)
+            with_brand['brand'] = ','.join(brands)
+            param_variants.append(with_brand)
+        param_variants.append(base_params)
 
-                # Prefer products with non-coming-soon variants and usable images.
-                scored = []
-                for product in products:
-                    product_id = self._extract_product_id(product)
-                    try:
-                        variant = self._select_variant(product, "")
-                    except Exception:
-                        # Product without embedded variants might still be usable after
-                        # we enrich it with product/<id> in generate_slot.
-                        if product_id:
-                            scored.append((1, product))
+        for url in endpoints:
+            for params in param_variants:
+                try:
+                    r = http.get(
+                        url = url,
+                        params = params,
+                        timeout = 5
+                    )
+                    r.raise_for_status()
+                    payload = r.json()
+                    products = self._extract_products_from_payload(payload)
+                    if not products:
+                        product_ids = self._extract_random_product_ids(payload)
+                        if product_ids:
+                            return {'id': product_ids[0]}
+                        errors.append("empty product list from %s params=%r" % (url, params))
                         continue
 
-                    images = variant.get("images")
-                    has_images = isinstance(images, list) and len(images) > 0
-                    coming_soon = bool(variant.get("coming_soon", False))
+                    # Prefer products with non-coming-soon variants and usable images.
+                    scored = []
+                    for product in products:
+                        product_id = self._extract_product_id(product)
+                        try:
+                            variant = self._select_variant(product, "")
+                        except Exception:
+                            # Product without embedded variants might still be usable after
+                            # we enrich it with product/<id> in generate_slot.
+                            if product_id:
+                                scored.append((1, product))
+                            continue
 
-                    score = 0
-                    if has_images:
-                        score += 2
-                    if not coming_soon:
-                        score += 1
-                    if product_id:
-                        score += 1
-                    scored.append((score, product))
+                        images = variant.get("images")
+                        has_images = isinstance(images, list) and len(images) > 0
+                        coming_soon = bool(variant.get("coming_soon", False))
 
-                if scored:
-                    scored.sort(key=lambda item: item[0], reverse=True)
-                    return scored[0][1]
+                        score = 0
+                        if has_images:
+                            score += 2
+                        if not coming_soon:
+                            score += 1
+                        if product_id:
+                            score += 1
+                        scored.append((score, product))
 
-                return products[0]
-            except Exception as err:
-                errors.append("%s: %r" % (url, err))
+                    if scored:
+                        scored.sort(key=lambda item: item[0], reverse=True)
+                        return scored[0][1]
+
+                    return products[0]
+                except Exception as err:
+                    errors.append("%s params=%r: %r" % (url, params, err))
 
         raise ValueError("random product fetch failed: %s" % (" | ".join(errors),))
 
@@ -390,18 +396,10 @@ class ProductUpdater(SlotUpdater):
                 variant = self._select_variant(product, "")
             except Exception as err:
                 print >>sys.stderr, "random mode failed: %r" % (err,)
-                fallback_product_id = slot_settings.get('product_id', '').strip()
-                if fallback_product_id:
-                    try:
-                        product = self._fetch_product_by_id(fallback_product_id)
-                        variant = self._select_variant(product, slot_settings.get('variant_id', '').strip())
-                    except Exception as err2:
-                        print >>sys.stderr, "random fallback(single product) failed: %r" % (err2,)
-                        product = {'id': 'unknown', 'brand': '', 'variants': [{}]}
-                        variant = {}
-                else:
-                    product = {'id': 'unknown', 'brand': '', 'variants': [{}]}
-                    variant = {}
+                # In random mode never fall back to a configured single product,
+                # otherwise the same product gets pinned forever when random fails.
+                product = {'id': 'unknown', 'brand': '', 'variants': [{}]}
+                variant = {}
         else:
             product_id = slot_settings.get('product_id', '').strip()
             if not product_id:
