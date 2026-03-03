@@ -434,61 +434,132 @@ local function Product(play_state, item)
     local price, old_price
     local artnr, name = '', ''
     local matching_products = {}
+    local active_revision = nil
+    local pending_bundle = nil
+    local pending_revision = nil
+    local last_poll_at = 0
+    local next_swap_at = play_state.get_start()
+
+    local function read_slot(now, on_screen)
+        local first_try = play_state.get_start()-1
+        local second_try = now
+        if on_screen then
+            first_try, second_try = now, play_state.get_start()-1
+        end
+        local slot, slot_assets = product_slot(first_try, item.uuid)
+        if not slot then
+            slot, slot_assets = product_slot(second_try, item.uuid)
+        end
+        return slot, slot_assets
+    end
+
+    local function load_bundle(slot, slot_assets)
+        local bundle = {
+            product = slot,
+            product_assets = slot_assets,
+            product_image = slot_assets.load_image(slot.img_product),
+            brand_image = slot_assets.load_image(slot.img_brand),
+            qrcode_image = slot_assets.load_image(slot.img_qrcode),
+            matching_products = {},
+            price = nil,
+            old_price = nil,
+            artnr = "",
+            name = "",
+        }
+
+        if slot.current_price then
+            bundle.price = helper.format_price(slot.currency, slot.current_price)
+        end
+        if slot.original_price then
+            bundle.old_price = helper.format_price(slot.currency, slot.original_price)
+        end
+        bundle.artnr = T('detail_view_sku_label') .. ' ' .. slot.id
+
+        local translation_prefix
+        if slot.customer_group == "MALE" then
+            translation_prefix = "webcat_haka_singular_"
+        else
+            translation_prefix = "webcat_singular_"
+        end
+        bundle.name = T(
+            translation_prefix .. slot.web_category:gsub(" ", "_"):lower(),
+            slot.web_category
+        )
+
+        for idx = 1, #(slot.matching or {}) do
+            local matching = slot.matching[idx]
+            bundle.matching_products[#bundle.matching_products+1] = {
+                image = slot_assets.load_image(matching.img_product),
+                price = matching.current_price and helper.format_price_no_currency(
+                    slot.currency, matching.current_price
+                ),
+            }
+        end
+        return bundle
+    end
+
+    local function apply_bundle(bundle, revision, now)
+        product = bundle.product
+        product_assets = bundle.product_assets
+        product_image = bundle.product_image
+        brand_image = bundle.brand_image
+        qrcode_image = bundle.qrcode_image
+        matching_products = bundle.matching_products
+        price = bundle.price
+        old_price = bundle.old_price
+        artnr = bundle.artnr
+        name = bundle.name
+        active_revision = revision
+        pending_bundle = nil
+        pending_revision = nil
+        next_swap_at = now + item.duration
+
+        debug_global_line_1 = string.format(
+            "product id=%s variant=%s mode=%s",
+            tostring(product.id or "?"),
+            tostring(product.variant_id or "?"),
+            tostring(product.debug_mode or "?")
+        )
+    end
+
+    local function poll_slot(now, on_screen)
+        local slot, slot_assets = read_slot(now, on_screen)
+        if not slot then
+            return
+        end
+        local revision = table.concat({
+            tostring(slot.id or ""),
+            tostring(slot.variant_id or ""),
+            tostring(slot.debug_updated_at or ""),
+        }, "|")
+        if revision == active_revision or revision == pending_revision then
+            return
+        end
+        pending_bundle = load_bundle(slot, slot_assets)
+        pending_revision = revision
+    end
 
     local function tick(now)
         local now, on_screen, from_start, to_end = play_state.get(now)
-        if not on_screen then
-            -- Load data two seconds before starting
-            if not product and from_start >= -2 then
-                local pinned_time = play_state.get_start()-1
-                product, product_assets = product_slot(pinned_time, item.uuid)
-                if not product then
-                    return
-                end
+        if from_start >= -2 and (now - last_poll_at >= 1) then
+            last_poll_at = now
+            poll_slot(now, on_screen)
+        end
 
-                product_image = product_assets.load_image(product.img_product)
-                brand_image = product_assets.load_image(product.img_brand)
-                qrcode_image = product_assets.load_image(product.img_qrcode)
+        if pending_bundle and not product then
+            apply_bundle(pending_bundle, pending_revision, now)
+        elseif pending_bundle and now >= next_swap_at then
+            apply_bundle(pending_bundle, pending_revision, now)
+        end
 
-                if product.current_price then
-                    price = helper.format_price(product.currency, product.current_price)
-                end
-                if product.original_price then
-                    old_price = helper.format_price(product.currency, product.original_price)
-                end
-
-                artnr = T('detail_view_sku_label') .. ' ' .. product.id
-
-                -- Translate product category into gender specific singular name value. See issue #4
-                local translation_prefix
-                if product.customer_group == "MALE" then
-                    translation_prefix = "webcat_haka_singular_"
-                else
-                    translation_prefix = "webcat_singular_"
-                end
-                name = T(
-                    translation_prefix .. product.web_category:gsub(" ", "_"):lower(),
-                    product.web_category
-                )
-                debug_global_line_1 = string.format(
-                    "product id=%s variant=%s mode=%s",
-                    tostring(product.id or "?"),
-                    tostring(product.variant_id or "?"),
-                    tostring(product.debug_mode or "?")
-                )
-                debug_global_line_2 = "updated " .. os.date("%Y-%m-%d %H:%M:%S")
-
-                for idx = 1, #product.matching do
-                    local matching = product.matching[idx]
-                    matching_products[#matching_products+1] = {
-                        image = product_assets.load_image(matching.img_product),
-                        price = matching.current_price and helper.format_price_no_currency(
-                            product.currency, matching.current_price
-                        ),
-                    }
-                end
-            end
-        elseif product then
+        if on_screen and product then
+            local remaining = math.max(0, math.floor(next_swap_at - now))
+            debug_global_line_2 = string.format(
+                "state=%s wait=%ss t=%s",
+                pending_bundle and "pending" or "stable",
+                tostring(remaining),
+                os.date("%H:%M:%S")
+            )
             local function price_box(x, y)
                 if testing() then
                     local foo = (math.floor(sys.now())) % 3
@@ -624,7 +695,8 @@ local function Product(play_state, item)
                     matching_box(120, 2450)
                 end
             end
-        else
+        elseif on_screen then
+            debug_global_line_2 = "state=waiting_payload t=" .. os.date("%H:%M:%S")
             ny_assets.fallback:draw(0, 0, WIDTH, HEIGHT)
         end
     end
@@ -796,9 +868,10 @@ end
 local function Playlist()
     local total_duration = 0
     local playlist
+    local cur, nxt
 
     local function update(new_playlist)
-        playlist = new_playlist
+        playlist = new_playlist or {}
         if #playlist == 0 then
             playlist = {{
                 type = "image",
@@ -817,9 +890,10 @@ local function Playlist()
                 item.duration = 5
             end
             item.offset = total_duration
-            if #item.uuid == 0 then
+            if not item.uuid or #item.uuid == 0 then
                 item.uuid = string.format('slot-%d', idx)
             end
+            item.assets = item.assets or {}
             for a = 1, #item.assets do
                 local file = item.assets[a].file
                 file.asset_name = resource.open_file(file.asset_name)
@@ -827,6 +901,16 @@ local function Playlist()
             total_duration = total_duration + item.duration
         end
         print("total playlist duration", total_duration)
+
+        -- If item identity changed, rebuild handlers on next tick.
+        if cur and #playlist == 1 then
+            if cur.item_type ~= playlist[1].type or cur.item_uuid ~= playlist[1].uuid then
+                if cur.handler.cleanup then
+                    cur.handler.cleanup()
+                end
+                cur, nxt = nil, nil
+            end
+        end
     end
 
     local function get_next_item(now, min_time_to_start)
@@ -847,13 +931,13 @@ local function Playlist()
         return min_start_t, playlist[next_idx]
     end
 
-    local cur, nxt
-
     local function prepare_next(now, min_time_to_start)
         local start_t, item = get_next_item(now, min_time_to_start)
         local play_state = PlayState(start_t, item.duration)
         return {
             play_state = play_state,
+            item_type = item.type,
+            item_uuid = item.uuid,
             handler = ({
                 image = Image,
                 video = Video,
@@ -865,6 +949,13 @@ local function Playlist()
     end
 
     local function play(now)
+        if cur and #playlist == 1 and
+           cur.item_type == playlist[1].type and
+           cur.item_uuid == playlist[1].uuid then
+            cur.handler.tick(now)
+            return
+        end
+
         if not nxt then
             local min_time_to_start = 1
             if cur then

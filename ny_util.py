@@ -150,8 +150,12 @@ class SlotUpdater(object):
             slots = slots,
         )
         c.commit()
-        time.sleep(self._refresh_interval)
 
     def run_forever(self):
         while 1:
+            cycle_started = time.time()
             self.tick()
+            elapsed = time.time() - cycle_started
+            sleep_for = self._refresh_interval - elapsed
+            if sleep_for > 0:
+                time.sleep(sleep_for)
